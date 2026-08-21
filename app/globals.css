@@ -1,26 +1,124 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Brand Colors (Extracted from UI Dashboard Image) */
+  --color-primary: #3c5a53; /* Dark Slate Teal Sidebar/Card Background */
+  --color-primary-hover: #2e4741;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #d9a726; /* Warm Ochre/Gold Accent */
+  --color-secondary-hover: #be921f;
+  --color-secondary-foreground: #ffffff;
+
+  /* Surfaces & Text (Light Mode) */
+  --color-background: #e2eeec; /* Soft Light Mint Page Background */
+  --color-foreground: #1e2d2a; /* Deep Teal Charcoal Text */
+
+  --color-card: #ffffff; /* Crisp White Main Dashboard Cards */
+  --color-card-foreground: #1e2d2a;
+
+  --color-popover: #3c5a53; /* Tooltip/Popover Background */
+  --color-popover-foreground: #ffffff;
+
+  --color-muted: #f2f7f6; /* Very Light Tinted Neutral */
+  --color-muted-foreground: #6e8580; /* Subtle Slate Gray-Green Text */
+
+  --color-accent: #eaf2f0; /* Hover State Accent Background */
+  --color-accent-foreground: #1e2d2a;
+
+  --color-border: #d3e0dd; /* Clean Low-Contrast Divider Line */
+  --color-input: #d3e0dd;
+  --color-ring: #3c5a53;
+
+  /* Status Indicators & Chart Highlights */
+  --color-success: #11a2a4; /* Bright Teal Accent */
+  --color-success-foreground: #ffffff;
+
+  --color-warning: #d9a726; /* Gold Badge/Pill Background */
+  --color-warning-foreground: #ffffff;
+
+  --color-destructive: #d9534f;
+  --color-destructive-foreground: #ffffff;
+
+  --radius-custom: 0.75rem; /* Matches the soft rounded design in image */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Dark Mode Overrides */
+[data-theme='dark'] {
+  --color-background: #182422; /* Deep Charcoal Teal Page Background */
+  --color-foreground: #e2eeec; /* Light Mint Text */
+
+  --color-card: #273834; /* Dark Teal Surface Card */
+  --color-card-foreground: #e2eeec;
+
+  --color-popover: #1b2826;
+  --color-popover-foreground: #e2eeec;
+
+  --color-muted: #314440;
+  --color-muted-foreground: #9db2ad;
+
+  --color-accent: #354a46;
+  --color-accent-foreground: #e2eeec;
+
+  --color-border: #3b524d;
+  --color-input: #3b524d;
+  --color-ring: #d9a726;
+
+  --color-primary: #3c5a53;
+  --color-primary-hover: #4a6d65;
+
+  --color-secondary: #d9a726;
+  --color-secondary-hover: #e5b331;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    min-height: 100vh;
+    font-feature-settings: "rlwr" 1, "cv05" 1;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom Component Utility Classes */
+.card-surface {
+  background-color: var(--color-card);
+  color: var(--color-card-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-custom);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.03), 0 2px 4px -2px rgb(0 0 0 / 0.03);
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.badge-approved {
+  background-color: #11a2a4;
+  color: #ffffff;
+  border: 1px solid #0d888a;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-pending {
+  background-color: #d9a726;
+  color: #ffffff;
+  border: 1px solid #be921f;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-revision {
+  background-color: #3c5a53;
+  color: #ffffff;
+  border: 1px solid #2e4741;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
