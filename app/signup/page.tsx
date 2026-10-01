@@ -1,6 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 export default function SignupPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen flex bg-background">
       {/* LEFT SIDE - Branding */}
@@ -80,24 +84,13 @@ export default function SignupPage() {
             </a>
           </div>
 
-          {/* Google / University ID buttons */}
-          <div className="flex gap-3 mb-4">
-            <button className="flex-1 border border-border py-2 rounded-lg text-sm text-foreground hover:bg-accent transition">
-              Google
-            </button>
-            <button className="flex-1 border border-border py-2 rounded-lg text-sm text-foreground hover:bg-accent transition">
-              University ID
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-px bg-border"></div>
-            <span className="text-xs text-muted-foreground">OR</span>
-            <div className="flex-1 h-px bg-border"></div>
-          </div>
-
-          <form className="flex flex-col gap-4">
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              router.push("/login");
+            }}
+          >
             <div>
               <label className="text-sm text-muted-foreground">
                 Full Name
