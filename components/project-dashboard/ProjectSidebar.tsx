@@ -1,22 +1,16 @@
+
+//app/(student)/project/dummy-data.ts
 import { StatCard } from "./ui/StatCard";
 import type { project as Project } from "../../app/(student)/project/dummy-data";
-
-const nav = [
-     { id: "overview", label: "Overview", icon: "◧" },
-     { id: "milestones", label: "Milestones", icon: "◈" },
-     { id: "submissions", label: "Submissions", icon: "▤" },
-     { id: "feedback", label: "Feedback", icon: "◐" },
-     { id: "chat", label: "Chat", icon: "◍" },
-];
 
 export default function ProjectSidebar({ project }: { project: typeof Project }) {
      const done = project.milestones.filter((m) => m.status === "approved").length;
      const pending = project.milestones.filter((m) => m.status === "pending").length;
 
      return (
-          <div className="space-y-4 grid grid-cols-2 gap-4 justify-between">
+          <div className="grid grid-cols-2 gap-4 justify-between">
                {/* Project meta */}
-               <div className=" card-surface p-5">
+               <div className="card-surface p-5">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Team</p>
                     <p className="mt-1 font-semibold">{project.team}</p>
 

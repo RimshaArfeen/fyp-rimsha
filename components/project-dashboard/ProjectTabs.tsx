@@ -1,26 +1,23 @@
-
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import OverviewTab from "./tabs/OverviewTab";
 import MilestonesTab from "./tabs/MilestonesTab";
 import SubmissionsTab from "./tabs/SubmissionsTab";
 import FeedbackTab from "./tabs/FeedbackTab";
 import ChatTab from "./tabs/ChatTab";
 import type { project as Project } from "../../app/(student)/project/dummy-data";
-
-const tabs = [
-     { id: "overview", label: "Overview" },
-     { id: "milestones", label: "Milestones" },
-     { id: "submissions", label: "Submissions" },
-     { id: "feedback", label: "Feedback" },
-     { id: "chat", label: "Chat" },
-] as const;
-
-type TabId = (typeof tabs)[number]["id"];
+import {
+     projectTabs,
+     parseProjectTab,
+     projectTabHref,
+} from "../../lib/project-tabs";
 
 export default function ProjectTabs({ project }: { project: typeof Project }) {
-     const [active, setActive] = useState<TabId>("overview");
+     // The URL is the source of truth, so the sidebar and the tab strip always agree.
+     const searchParams = useSearchParams();
+     const active = parseProjectTab(searchParams.get("tab"));
 
      return (
           <div className="space-y-4">
@@ -28,16 +25,18 @@ export default function ProjectTabs({ project }: { project: typeof Project }) {
                <div
                     role="tablist"
                     aria-label="Project sections"
-                    className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border -mb-px"
+                    className="scrollbar-sidebar -mb-px flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border"
                >
-                    {tabs.map((t) => {
+                    {projectTabs.map((t) => {
                          const isActive = active === t.id;
                          return (
-                              <button
+                              <Link
                                    key={t.id}
+                                   href={projectTabHref(t.id)}
+                                   scroll={false}
                                    role="tab"
                                    aria-selected={isActive}
-                                   onClick={() => setActive(t.id)}
+                                   aria-current={isActive ? "page" : undefined}
                                    className={`relative whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${isActive
                                              ? "text-foreground"
                                              : "text-muted-foreground hover:text-foreground"
@@ -45,9 +44,9 @@ export default function ProjectTabs({ project }: { project: typeof Project }) {
                               >
                                    {t.label}
                                    {isActive && (
-                                        <span className="absolute inset-x-2 -bottom-px h-0.5 bg-primary rounded-full" />
+                                        <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />
                                    )}
-                              </button>
+                              </Link>
                          );
                     })}
                </div>
