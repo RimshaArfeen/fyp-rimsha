@@ -1,11 +1,47 @@
+
+// app/login/page.tsx
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password");
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass =
+    "w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -70,62 +106,58 @@ export default function LoginPage() {
             Please enter your details to sign in.
           </p>
 
-          {/* Tab Toggle */}
           <div className="flex bg-muted rounded-lg p-1 mb-6">
-            <button
-              onClick={() => setActiveTab("login")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                activeTab === "login"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground"
-              }`}
+            <Link
+              href="/login"
+              className="flex-1 py-2 rounded-md text-sm font-medium text-center bg-primary text-primary-foreground"
             >
               Login
-            </button>
-            <button
-              onClick={() => router.push("/signup")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                activeTab === "signup"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground"
-              }`}
+            </Link>
+            <Link
+              href="/signup"
+              className="flex-1 py-2 rounded-md text-sm font-medium text-center text-muted-foreground"
             >
               Sign Up
-            </button>
+            </Link>
           </div>
 
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              router.push("/dashboard");
-            }}
-          >
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <div>
-              <label className="text-sm text-muted-foreground">
+              <label htmlFor="email" className="text-sm text-muted-foreground">
                 University Email
               </label>
               <input
+                id="email"
                 type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="rimsha@university.edu.pk"
-                className="w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <div className="flex justify-between items-center">
-                <label className="text-sm text-muted-foreground">
-                  Password
-                </label>
-              </div>
+              <label htmlFor="password" className="text-sm text-muted-foreground">
+                Password
+              </label>
               <input
+                id="password"
                 type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={inputClass}
               />
             </div>
 
-            {/* SSL Secured Badge */}
+            {error && (
+              <p role="alert" className="text-sm text-red-600">
+                {error}
+              </p>
+            )}
+
             <div className="flex items-center gap-2">
               <span className="bg-success text-success-foreground text-xs px-2 py-0.5 rounded-full font-medium">
                 SSL Secured
@@ -137,17 +169,18 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary-hover transition"
+              disabled={loading}
+              className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary-hover transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Continue to Dashboard
+              {loading ? "Signing in..." : "Continue to Dashboard"}
             </button>
           </form>
 
           <p className="text-center text-muted-foreground mt-6 text-sm">
             No account?{" "}
-            <a href="/signup" className="text-secondary font-medium">
+            <Link href="/signup" className="text-secondary font-medium">
               Create one
-            </a>
+            </Link>
           </p>
         </div>
       </div>

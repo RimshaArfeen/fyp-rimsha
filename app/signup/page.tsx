@@ -1,9 +1,67 @@
+// app/signup/page.tsx
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 
 export default function SignupPage() {
   const router = useRouter();
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "student",
+  });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Signup failed");
+        return;
+      }
+
+      // Auto sign-in after successful signup
+      const result = await signIn("credentials", {
+        email: form.email,
+        password: form.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        router.push("/login"); // account created, but auto-login failed
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass =
+    "w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -58,6 +116,7 @@ export default function SignupPage() {
         </p>
       </div>
 
+      
       {/* RIGHT SIDE - Form */}
       <div className="w-full md:w-1/2 flex flex-col justify-center items-center p-10 bg-background">
         <div className="w-full max-w-sm">
@@ -68,73 +127,93 @@ export default function SignupPage() {
             Join Pulse and start managing your FYP.
           </p>
 
-          {/* Tab Toggle */}
           <div className="flex bg-muted rounded-lg p-1 mb-6">
-            <a
+            <Link
               href="/login"
               className="flex-1 py-2 rounded-md text-sm font-medium text-center text-muted-foreground"
             >
               Login
-            </a>
-            <a
+            </Link>
+            <Link
               href="/signup"
               className="flex-1 py-2 rounded-md text-sm font-medium text-center bg-primary text-primary-foreground"
             >
               Sign Up
-            </a>
+            </Link>
           </div>
 
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              router.push("/login");
-            }}
-          >
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <div>
-              <label className="text-sm text-muted-foreground">
+              <label htmlFor="name" className="text-sm text-muted-foreground">
                 Full Name
               </label>
               <input
+                id="name"
+                name="name"
                 type="text"
+                required
+                value={form.name}
+                onChange={handleChange}
                 placeholder="Enter your full name"
-                className="w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <label className="text-sm text-muted-foreground">
+              <label htmlFor="email" className="text-sm text-muted-foreground">
                 University Email
               </label>
               <input
+                id="email"
+                name="email"
                 type="email"
+                required
+                value={form.email}
+                onChange={handleChange}
                 placeholder="rimsha@university.edu.pk"
-                className="w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <label className="text-sm text-muted-foreground">
+              <label htmlFor="password" className="text-sm text-muted-foreground">
                 Password
               </label>
               <input
+                id="password"
+                name="password"
                 type="password"
+                required
+                minLength={8}
+                value={form.password}
+                onChange={handleChange}
                 placeholder="••••••••"
-                className="w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <label className="text-sm text-muted-foreground">
+              <label htmlFor="role" className="text-sm text-muted-foreground">
                 I am a:
               </label>
-              <select className="w-full mt-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+              <select
+                id="role"
+                name="role"
+                value={form.role}
+                onChange={handleChange}
+                className={inputClass}
+              >
                 <option value="student">Student</option>
                 <option value="teacher">Teacher</option>
               </select>
             </div>
 
-            {/* SSL Secured Badge */}
+            {error && (
+              <p role="alert" className="text-sm text-red-600">
+                {error}
+              </p>
+            )}
+
             <div className="flex items-center gap-2">
               <span className="bg-success text-success-foreground text-xs px-2 py-0.5 rounded-full font-medium">
                 SSL Secured
@@ -146,17 +225,18 @@ export default function SignupPage() {
 
             <button
               type="submit"
-              className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary-hover transition"
+              disabled={loading}
+              className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary-hover transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Create Account
+              {loading ? "Creating account..." : "Create Account"}
             </button>
           </form>
 
           <p className="text-center text-muted-foreground mt-6 text-sm">
             Already have an account?{" "}
-            <a href="/login" className="text-secondary font-medium">
+            <Link href="/login" className="text-secondary font-medium">
               Login
-            </a>
+            </Link>
           </p>
         </div>
       </div>

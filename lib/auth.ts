@@ -1,58 +1,52 @@
-
-import NextAuth from 'next-auth'
-import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@auth/prisma-adapter'
-import { prisma } from './prisma'
-import bcrypt from 'bcryptjs'
+// lib/auth.ts
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { prisma } from "../lib/prisma";
+import { loginSchema } from "../lib/validations";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
-  session: { strategy: 'jwt' },
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 }, // 7 days
+  pages: { signIn: "/login" },
   providers: [
-    CredentialsProvider({
-      name: 'credentials',
+    Credentials({
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
-        
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        })
-        
-        if (!user || !user.password) return null
-        
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        )
-        
-        if (!isValid) return null
-        
+      async authorize(raw) {
+        const parsed = loginSchema.safeParse(raw);
+        if (!parsed.success) return null;
+
+        const { email, password } = parsed.data;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return null;
+
+        const valid = await bcrypt.compare(password, user.password);
+        if (!valid) return null;
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           role: user.role,
-        }
+        };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role
-        token.id = user.id
+        token.id = user.id as string;
+        token.role = (user as typeof user & { role: string }).role;
       }
-      return token
+      return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        Object.assign(session.user, { role: token.role, id: token.id })
-      }
-      return session
+      session.user.id = token.id as string;
+      (session.user as typeof session.user & { role: string }).role = token.role as string;
+      return session;
     },
   },
-})
+});
