@@ -1,0 +1,199 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ============ USER MODEL ============
+model User {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  email          String   @unique       // keep — every user has an email
+  password       String
+  name           String
+  role           String
+  profilePicture String?
+  contact        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Student-specific fields — remove @unique
+  registrationNumber String?   // <-- removed @unique
+  program            String?
+  semester           Int?
+  cgpa               Float?
+  enrolledCourses    String[]
+  skills             String[]
+  interestAreas      String[]
+  experienceLevel    String?
+  githubLink         String?
+  linkedinProfile    String?
+
+  // Teacher-specific fields — remove @unique
+  employeeId         String?   // <-- removed @unique
+  department         String?
+  designation        String?
+  researchAreas      String[]
+  publications       String[]
+  supervisionDomains String[]
+  maxProjects        Int      @default(5)
+
+ ledTeams           Team[]         @relation("TeamLead")
+  teamMemberships    TeamMember[]
+  supervisedProjects Project[]      @relation("Supervisor")
+  joinRequestsSent   JoinRequest[]  @relation("Requester")
+  submissions        Submission[]   @relation("SubmittedBy")
+  feedbackGiven      Feedback[]     @relation("FeedbackAuthor")
+  milestonesAssigned Milestone[]    @relation("Assignee")
+
+  @@index([role])
+  @@index([registrationNumber])   // add a normal index for lookups
+  @@index([employeeId])           // add a normal index for lookups
+}
+  
+// ============ TEAM MODEL ============
+model Team {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  name             String
+  maxSize          Int      @default(5)
+  projectDomain    String
+  description      String?
+  isOpen           Boolean  @default(true)
+  supervisorStatus String   @default("NONE") // NONE, PENDING, ACCEPTED, DECLINED
+
+  leadId String @db.ObjectId
+  lead   User   @relation("TeamLead", fields: [leadId], references: [id])
+
+  members      TeamMember[]
+  project      Project?
+  joinRequests JoinRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectDomain])
+  @@index([isOpen])
+}
+
+// ============ TEAM MEMBER MODEL ============
+model TeamMember {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId   String   @db.ObjectId
+  teamId   String   @db.ObjectId
+  role     String   @default("MEMBER") // "LEAD", "MEMBER"
+  joinedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
+// ============ JOIN REQUEST MODEL ============
+model JoinRequest {
+  id      String  @id @default(auto()) @map("_id") @db.ObjectId
+  message String?
+  status  String  @default("PENDING") // PENDING, APPROVED, REJECTED
+
+  requesterId String @db.ObjectId
+  teamId      String @db.ObjectId
+
+  requester User @relation("Requester", fields: [requesterId], references: [id])
+  team      Team @relation(fields: [teamId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([requesterId, teamId])
+  @@index([status])
+}
+
+// ============ PROJECT MODEL ============
+model Project {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  description   String
+  timelineStart DateTime?
+  timelineEnd   DateTime?
+  status        String    @default("DRAFT")
+
+  teamId       String  @unique @db.ObjectId
+  supervisorId String? @db.ObjectId
+
+  team       Team @relation(fields: [teamId], references: [id])
+  supervisor User? @relation("Supervisor", fields: [supervisorId], references: [id])
+
+  milestones Milestone[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============ MILESTONE MODEL ============
+model Milestone {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  deadline    DateTime
+  status      String   @default("PENDING")
+
+  projectId  String  @db.ObjectId
+  assigneeId String? @db.ObjectId
+
+  project  Project @relation(fields: [projectId], references: [id])
+  assignee User?   @relation("Assignee", fields: [assigneeId], references: [id])
+
+  submissions Submission[]
+  feedback    Feedback[]      // <-- added back-reference
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+}
+
+// ============ SUBMISSION MODEL ============
+model Submission {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  fileName  String
+  fileUrl   String
+  version   Int     @default(1)
+  notes     String?
+
+  milestoneId   String @db.ObjectId
+  submittedById String @db.ObjectId
+
+  milestone   Milestone @relation(fields: [milestoneId], references: [id])
+  submittedBy User      @relation("SubmittedBy", fields: [submittedById], references: [id])
+
+  feedback Feedback[]   // <-- added back-reference
+
+  createdAt DateTime @default(now())
+
+  @@index([milestoneId])
+}
+
+// ============ FEEDBACK MODEL ============
+model Feedback {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  content        String
+  inlineComments String[]
+
+  milestoneId  String? @db.ObjectId
+  submissionId String? @db.ObjectId
+  authorId     String  @db.ObjectId
+
+  milestone  Milestone?  @relation(fields: [milestoneId], references: [id])
+  submission Submission? @relation(fields: [submissionId], references: [id])
+  author     User        @relation("FeedbackAuthor", fields: [authorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([milestoneId])
+  @@index([submissionId])
+}
