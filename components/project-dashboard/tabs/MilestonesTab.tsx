@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SectionCard } from "../ui/SectionCard";
 import { Avatar } from "../ui/Avatar";
 import Badge from "../ui/Badge";
+import { useProjectStore } from "../../../lib/project-store";
+import { projectTabHref } from "../../../lib/project-tabs";
 import type { project as Project } from "../../../app/(student)/project/dummy-data";
 
 const filters = ["All", "Pending", "Approved", "Revision"] as const;
@@ -13,11 +17,12 @@ type Milestone = (typeof Project)["milestones"][number];
 export default function MilestonesTab({ project }: { project: typeof Project }) {
      const [filter, setFilter] = useState<(typeof filters)[number]>("All");
      const [selected, setSelected] = useState<Milestone | null>(null);
+        const { milestones, submissions } = useProjectStore();
 
      const list =
           filter === "All"
-               ? project.milestones
-               : project.milestones.filter((m) => m.status === filter.toLowerCase());
+               ? milestones
+               : milestones.filter((m) => m.status === filter.toLowerCase());
 
      return (
           <>
@@ -73,13 +78,10 @@ export default function MilestonesTab({ project }: { project: typeof Project }) 
                                              </div>
                                              <button
                                                   type="button"
-                                                  onClick={() => {
-                                                       console.log("SETTING SELECTED:", m);
-                                                       setSelected(m);
-                                                  }}
+                                                  onClick={() => setSelected(m)}
                                                   className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-sm"
                                              >
-                                                  View details →
+                                                  {m.status === "revision" ? "Fix and resubmit →" : "View details →"}
                                              </button>
                                         </div>
                                    </div>
@@ -115,6 +117,8 @@ function MilestoneDetailsModal({
      onClose: () => void;
 }) {
      const [mounted, setMounted] = useState(false);
+     const { milestones, submissionsFor, feedbackFor } = useProjectStore();
+     const live = milestones.find((m) => m.id === milestone.id);
 
      useEffect(() => {
           setMounted(true);
@@ -138,34 +142,21 @@ function MilestoneDetailsModal({
 
      /* ---- Derived info ---- */
 
-     // Resolve assignee initials → full Member objects
      const assigneeMembers = project.members.filter((mem) =>
           milestone.assignees.includes(mem.initials)
      );
 
-     // Lead for this milestone = first assignee who is a Lead, else first assignee
      const lead =
           assigneeMembers.find((m) => m.role === "Lead") ?? assigneeMembers[0];
 
-     // Related submissions for this milestone
-     const relatedSubmissions = project.submissions.filter(
-          (s) => s.milestone === milestone.title
-     );
+     const relatedSubmissions = submissionsFor(milestone.title);
+     const relatedFeedback = feedbackFor(milestone.title);
 
-     // Related feedback (matched loosely by substring of title)
-     const relatedFeedback = project.feedback.filter(
-          (f) =>
-               f.snippet.toLowerCase().includes(milestone.title.split(" ")[0].toLowerCase()) ||
-               f.body.toLowerCase().includes(milestone.title.split(" ")[0].toLowerCase())
-     );
-
-     // Days remaining calculation (best-effort against endDate)
      const daysUntilDue = (() => {
           const due = new Date(milestone.due);
           const today = new Date();
           if (isNaN(due.getTime())) return null;
-          const diff = Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
-          return diff;
+          return Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
      })();
 
      /* ---- Status styling ---- */
@@ -192,10 +183,10 @@ function MilestoneDetailsModal({
                pill: "bg-destructive/15 text-destructive border-destructive/30",
                dot: "bg-destructive",
                label: "Needs Revision",
-               blurb: "Supervisor has requested changes. Check the feedback tab for details.",
+               blurb: "Supervisor has requested changes. Check the feedback below, then resubmit.",
           },
      };
-     const s = statusStyles[milestone.status];
+     const s = statusStyles[live?.status ?? milestone.status];
 
      return createPortal(
           <div
@@ -213,18 +204,16 @@ function MilestoneDetailsModal({
 
                {/* Card */}
                <div className="relative z-10 w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-border bg-card shadow-2xl ring-1 ring-black/5">
-                    {/* --- Colored top band --- */}
+                    {/* Colored top band */}
                     <div className={`h-1.5 w-full rounded-t-2xl ${s.dot}`} />
 
-                    {/* --- Header --- */}
+                    {/* Header */}
                     <div className="p-5 sm:p-6 border-b border-border">
                          <div className="flex items-start justify-between gap-4">
                               <div className="min-w-0">
                                    <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                                         <span>Milestone</span>
-                                        <span aria-hidden="true" className="opacity-50">
-                                             ·
-                                        </span>
+                                        <span aria-hidden="true" className="opacity-50">·</span>
                                         <span className="tabular-nums">{milestone.id}</span>
                                    </div>
                                    <h3
@@ -234,9 +223,7 @@ function MilestoneDetailsModal({
                                    >
                                         {milestone.title}
                                    </h3>
-                                   <p className="mt-1 text-sm text-muted-foreground">
-                                        {s.blurb}
-                                   </p>
+                                   <p className="mt-1 text-sm text-muted-foreground">{s.blurb}</p>
                               </div>
 
                               <button
@@ -308,9 +295,9 @@ function MilestoneDetailsModal({
                          </div>
                     </div>
 
-                    {/* --- Body --- */}
+                    {/* Body */}
                     <div className="p-5 sm:p-6 space-y-6">
-                         {/* Team / Assignees */}
+                         {/* Assignees */}
                          <section>
                               <SectionHeading
                                    icon={
@@ -334,11 +321,8 @@ function MilestoneDetailsModal({
                                    count={assigneeMembers.length}
                               />
 
-                              {/* Lead spotlight */}
                               {lead && (
-                                   <div
-                                        className={`mt-3 flex items-center gap-3 rounded-[var(--radius-custom)] border border-border bg-gradient-to-br from-primary/5 to-transparent p-3`}
-                                   >
+                                   <div className="mt-3 flex items-center gap-3 rounded-[var(--radius-custom)] border border-border bg-gradient-to-br from-primary/5 to-transparent p-3">
                                         <div className="relative">
                                              <Avatar initials={lead.initials} size={44} />
                                              {lead.online && (
@@ -360,15 +344,13 @@ function MilestoneDetailsModal({
                                              </p>
                                         </div>
                                         <span
-                                             className={`shrink-0 text-[11px] font-medium ${lead.online ? "text-success" : "text-muted-foreground"
-                                                  }`}
+                                             className={`shrink-0 text-[11px] font-medium ${lead.online ? "text-success" : "text-muted-foreground"}`}
                                         >
                                              {lead.online ? "● Online" : "○ Offline"}
                                         </span>
                                    </div>
                               )}
 
-                              {/* Other assignees */}
                               {assigneeMembers.length > 1 && (
                                    <ul className="mt-3 space-y-2">
                                         {assigneeMembers
@@ -389,13 +371,10 @@ function MilestoneDetailsModal({
                                                        </div>
                                                        <div className="min-w-0 flex-1">
                                                             <p className="text-sm font-medium truncate">{m.name}</p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                 {m.role}
-                                                            </p>
+                                                            <p className="text-xs text-muted-foreground">{m.role}</p>
                                                        </div>
                                                        <span
-                                                            className={`text-[11px] font-medium ${m.online ? "text-success" : "text-muted-foreground"
-                                                                 }`}
+                                                            className={`text-[11px] font-medium ${m.online ? "text-success" : "text-muted-foreground"}`}
                                                        >
                                                             {m.online ? "Online" : "Offline"}
                                                        </span>
@@ -405,7 +384,7 @@ function MilestoneDetailsModal({
                               )}
                          </section>
 
-                         {/* Timeline / Dates */}
+                         {/* Timeline */}
                          <section>
                               <SectionHeading
                                    icon={
@@ -463,7 +442,7 @@ function MilestoneDetailsModal({
                                              >
                                                   <div className="min-w-0">
                                                        <p className="text-sm font-medium truncate">
-                                                            {sub.milestone}
+                                                            {sub.fileName || sub.milestone}
                                                        </p>
                                                        <p className="text-xs text-muted-foreground">
                                                             {sub.submittedBy} · {sub.date}
@@ -506,16 +485,10 @@ function MilestoneDetailsModal({
                                                   className="rounded-[var(--radius-custom)] border border-border bg-card/60 p-3"
                                              >
                                                   <div className="flex items-center justify-between gap-2">
-                                                       <p className="text-xs font-medium text-foreground">
-                                                            {f.author}
-                                                       </p>
-                                                       <span className="text-xs text-muted-foreground">
-                                                            {f.date}
-                                                       </span>
+                                                       <p className="text-xs font-medium text-foreground">{f.author}</p>
+                                                       <span className="text-xs text-muted-foreground">{f.date}</span>
                                                   </div>
-                                                  <p className="mt-1 text-sm text-foreground/80 leading-relaxed">
-                                                       {f.body}
-                                                  </p>
+                                                  <p className="mt-1 text-sm text-foreground/80 leading-relaxed">{f.body}</p>
                                                   {f.resolved && (
                                                        <span className="mt-2 inline-block text-[11px] font-medium text-success">
                                                             ✓ Resolved
@@ -526,9 +499,12 @@ function MilestoneDetailsModal({
                                    </ul>
                               </section>
                          )}
+
+                         {/* Submit box (student only) */}
+                         <MilestoneActions milestone={milestone} />
                     </div>
 
-                    {/* --- Footer --- */}
+                    {/* Footer */}
                     <div className="sticky bottom-0 border-t border-border bg-card/95 backdrop-blur px-5 sm:px-6 py-3 flex items-center justify-between gap-2">
                          <p className="hidden sm:block text-xs text-muted-foreground">
                               Milestone ID · <span className="tabular-nums">{milestone.id}</span>
@@ -541,31 +517,93 @@ function MilestoneDetailsModal({
                               >
                                    Close
                               </button>
-                              {/* <button
-                                   type="button"
-                                   className="inline-flex items-center gap-2 rounded-[var(--radius-custom)] bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                              >
-                                   <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        className="h-4 w-4"
-                                        aria-hidden="true"
-                                   >
-                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                        <polyline points="15 3 21 3 21 9" />
-                                        <line x1="10" y1="14" x2="21" y2="3" />
-                                   </svg>
-                                   Open full view
-                              </button> */}
                          </div>
                     </div>
                </div>
           </div>,
           document.body
+     );
+}
+
+/* ---------- Submit box (student only) ---------- */
+
+function MilestoneActions({ milestone }: { milestone: Milestone }) {
+     const { milestones, submissionsFor, feedbackFor, submit } = useProjectStore();
+     const [fileName, setFileName] = useState("");
+     const [note, setNote] = useState("");
+
+     const status = milestones.find((m) => m.id === milestone.id)?.status ?? milestone.status;
+     const latest = submissionsFor(milestone.title)[0];
+     const hasFeedback = feedbackFor(milestone.title).length > 0;
+     const waiting = status === "pending" && latest?.status === "pending";
+     const canSubmit = status === "revision" || (status === "pending" && !waiting);
+
+     const input =
+          "w-full rounded-[var(--radius-custom)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+     const link = "text-xs font-medium text-secondary hover:underline";
+
+     const doSubmit = () => {
+          if (!fileName) return;
+          submit(milestone.id, milestone.title, { fileName, note });
+          setFileName("");
+          setNote("");
+     };
+
+     return (
+          <section>
+               <SectionHeading
+                    icon={<span aria-hidden="true">↑</span>}
+                    title={status === "revision" ? "Resubmit your work" : status === "approved" ? "Status" : "Submit your work"}
+               />
+               <div className="mt-3 space-y-3 rounded-[var(--radius-custom)] border border-border bg-card/60 p-3">
+                    {canSubmit && (
+                         <>
+                              {status === "revision" && (
+                                   <p className="text-sm text-muted-foreground">
+                                        Your supervisor asked for changes. Fix them, then upload the new version.
+                                   </p>
+                              )}
+                              <input
+                                   type="file"
+                                   onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+                                   className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+                              />
+                              <textarea
+                                   className={input}
+                                   rows={2}
+                                   placeholder="Short note for your supervisor (optional)"
+                                   value={note}
+                                   onChange={(e) => setNote(e.target.value)}
+                              />
+                              <button
+                                   type="button"
+                                   onClick={doSubmit}
+                                   disabled={!fileName}
+                                   className="rounded-[var(--radius-custom)] bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                   {status === "revision" ? "Resubmit" : "Submit for review"}
+                              </button>
+                         </>
+                    )}
+
+                    {waiting && (
+                         <p className="text-sm">
+                              Submitted{latest?.fileName ? ` (${latest.fileName})` : ""}. Waiting for your supervisor&apos;s review.
+                              You will see the result here and in the Feedback tab.
+                         </p>
+                    )}
+
+                    {status === "approved" && (
+                         <p className="text-sm text-success">✓ Approved. Nothing more to submit.</p>
+                    )}
+
+                                   {hasFeedback && (
+                         <div className="pt-1">
+                              <Link href={projectTabHref("feedback")} className={link}>See in Feedback →</Link>
+                         </div>
+                    )}
+               </div>
+          </section>
      );
 }
 

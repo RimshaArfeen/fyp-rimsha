@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Crown, UserPlus, Users, Check, X, Send, ClipboardList, FolderKanban, Clock, Search } from "lucide-react";
+import { Crown, UserPlus, Users, Check, X, Send, ClipboardList, FolderKanban, Clock } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { team, project } from "../../../lib/dummyData";
+import { useStage } from "../../../lib/stage";
+import { useProjectStore } from "../../../lib/project-store";
 
 type Member = { id: number; name: string; role: string; skills: string[] };
 type Request = { id: number; name: string; skills: string[]; message: string };
 type Invite = { id: number; who: string };
-type Assignment = { id: number; title: string; to: string; done: boolean };
 
 const MAX_MEMBERS = 5;
 const skillsByName: Record<string, string[]> = {
@@ -21,6 +23,10 @@ const inputCls =
   "w-full px-4 py-2.5 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
 export default function MyTeamPage() {
+  const router = useRouter();
+  const { stage, setStage, ready } = useStage();
+  const { tasks, addTask, toggleTask } = useProjectStore();
+
   const [viewAs, setViewAs] = useState<"lead" | "member">("lead");
   const [members, setMembers] = useState<Member[]>(
     team.members.map((m) => ({ ...m, skills: skillsByName[m.name] ?? [] }))
@@ -31,15 +37,18 @@ export default function MyTeamPage() {
     { id: 103, name: "Omar Farooq", skills: ["Testing", "Git"], message: "I can help with testing and documentation." },
   ]);
   const [invites, setInvites] = useState<Invite[]>([{ id: 201, who: "kamran@university.edu.pk" }]);
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    { id: 301, title: "Design the database schema", to: "Hamza Ali", done: false },
-    { id: 302, title: "Build the login screens", to: "Sara Noor", done: true },
-  ]);
   const [inviteText, setInviteText] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskTo, setTaskTo] = useState(team.members[1].name);
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
+  const [pTitle, setPTitle] = useState("");
+  const [pDesc, setPDesc] = useState("");
+  const [pSupervisor, setPSupervisor] = useState(project.supervisor);
+
+  useEffect(() => {
+    if (ready && stage === 1) router.replace("/teams");
+  }, [ready, stage, router]);
 
   const isLead = viewAs === "lead";
   const spots = MAX_MEMBERS - members.length;
@@ -76,12 +85,16 @@ export default function MyTeamPage() {
   const assignTask = () => {
     const title = taskTitle.trim();
     if (!title) return say("Write the task first");
-    setAssignments((p) => [{ id: Date.now(), title, to: taskTo, done: false }, ...p]);
+    addTask(title, taskTo);
     setTaskTitle("");
     say(`Task assigned to ${taskTo}`);
   };
-  const toggleTask = (id: number) =>
-    setAssignments((p) => p.map((a) => (a.id === id ? { ...a, done: !a.done } : a)));
+
+  const createProject = () => {
+    if (!pTitle.trim()) return say("Write the project title first");
+    setStage(3);
+    router.push("/project");
+  };
 
   const stats = [
     { label: "Members", value: `${members.length}/${MAX_MEMBERS}`, icon: Users },
@@ -89,6 +102,8 @@ export default function MyTeamPage() {
     { label: "Join requests", value: String(requests.length), icon: Clock },
     { label: "Invites sent", value: String(invites.length), icon: Send },
   ];
+
+  if (!ready || stage === 1) return null;
 
   return (
     <div className="w-full flex flex-col gap-8">
@@ -102,7 +117,9 @@ export default function MyTeamPage() {
         <div className="relative z-10">
           <p className="text-sm opacity-80 mb-1">My Team</p>
           <h1 className="text-3xl font-bold mb-1">{team.name}</h1>
-          <p className="text-sm opacity-80">{project.title} • Supervisor: {project.supervisor}</p>
+          <p className="text-sm opacity-80">
+            {stage >= 3 ? `${project.title} • Supervisor: ${project.supervisor}` : "No project yet"}
+          </p>
         </div>
         <div className="relative z-10 flex flex-col items-end gap-3">
           <div className="flex bg-white/10 rounded-lg p-1 text-sm">
@@ -116,9 +133,11 @@ export default function MyTeamPage() {
               </button>
             ))}
           </div>
-          <Link href="/project" className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition">
-            Open Project Dashboard
-          </Link>
+          {stage >= 3 && (
+            <Link href="/project" className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition">
+              Open Project Dashboard
+            </Link>
+          )}
         </div>
       </section>
 
@@ -182,12 +201,7 @@ export default function MyTeamPage() {
             <section className="fade-up card-surface p-6" style={{ animationDelay: "200ms" }}>
               <h2 className="font-semibold text-lg mb-5">Join Requests ({requests.length})</h2>
               {requests.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted-foreground mb-4">No pending requests right now.</p>
-                  <Link href="/teams" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">
-                    <Search className="w-4 h-4" /> Browse Find Teams
-                  </Link>
-                </div>
+                <p className="text-sm text-muted-foreground text-center py-8">No pending requests right now.</p>
               ) : (
                 <ul className="flex flex-col gap-4">
                   {requests.map((r) => (
@@ -214,23 +228,44 @@ export default function MyTeamPage() {
 
         {/* RIGHT: project, invite, tasks */}
         <div className="flex flex-col gap-6">
-          <section className="fade-up card-surface p-6" style={{ animationDelay: "160ms" }}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-lg">Project</h2>
-              <span className="badge-approved">Approved</span>
-            </div>
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-11 h-11 shrink-0 rounded-xl bg-accent text-primary flex items-center justify-center"><FolderKanban className="w-5 h-5" /></div>
-              <div>
-                <p className="font-medium">{project.title}</p>
-                <p className="text-sm text-muted-foreground">Supervisor: {project.supervisor}</p>
+          {stage >= 3 ? (
+            <section className="fade-up card-surface p-6" style={{ animationDelay: "160ms" }}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-lg">Project</h2>
+                <span className="badge-approved">Approved</span>
               </div>
-            </div>
-            <div className="h-2 rounded-full bg-muted overflow-hidden mb-1">
-              <div className="h-full bg-secondary transition-all duration-1000" style={{ width: `${project.progress}%` }} />
-            </div>
-            <p className="text-xs text-muted-foreground">{project.progress}% complete</p>
-          </section>
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-11 h-11 shrink-0 rounded-xl bg-accent text-primary flex items-center justify-center"><FolderKanban className="w-5 h-5" /></div>
+                <div>
+                  <p className="font-medium">{project.title}</p>
+                  <p className="text-sm text-muted-foreground">Supervisor: {project.supervisor}</p>
+                </div>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden mb-1">
+                <div className="h-full bg-secondary transition-all duration-1000" style={{ width: `${project.progress}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground">{project.progress}% complete</p>
+            </section>
+          ) : (
+            <section className="fade-up card-surface p-6 border-l-4 border-l-secondary" style={{ animationDelay: "160ms" }}>
+              <h2 className="font-semibold text-lg mb-1">Create your project</h2>
+              {isLead ? (
+                <>
+                  <p className="text-sm text-muted-foreground mb-4">Add your project to unlock Milestones and Feedback.</p>
+                  <div className="flex flex-col gap-3">
+                    <input className={inputCls} placeholder="Project title" value={pTitle} onChange={(e) => setPTitle(e.target.value)} />
+                    <textarea className={inputCls} rows={3} placeholder="Short description" value={pDesc} onChange={(e) => setPDesc(e.target.value)} />
+                    <input className={inputCls} placeholder="Supervisor name" value={pSupervisor} onChange={(e) => setPSupervisor(e.target.value)} />
+                    <button onClick={createProject} className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition">
+                      Create project
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Only the team lead can create the project. Ask your lead to do it.</p>
+              )}
+            </section>
+          )}
 
           {isLead && (
             <>
@@ -273,16 +308,24 @@ export default function MyTeamPage() {
                   </div>
                 </div>
                 <ul className="flex flex-col gap-2">
-                  {assignments.map((a) => (
-                    <li key={a.id} className="pop flex items-center gap-3 text-sm">
-                      <button onClick={() => toggleTask(a.id)} aria-label="Toggle task" className={`w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition ${a.done ? "bg-primary border-primary text-primary-foreground" : "border-border"}`}>
-                        {a.done && <Check className="w-3 h-3" />}
-                      </button>
-                      <span className={`flex-1 ${a.done ? "line-through opacity-60" : ""}`}>{a.title}</span>
-                      <span className="text-xs text-muted-foreground">{a.to.split(" ")[0]}</span>
-                    </li>
-                  ))}
+                  {tasks.slice(0, 6).map((t) => {
+                    const done = t.status === "done";
+                    return (
+                      <li key={t.id} className="pop flex items-center gap-3 text-sm">
+                        <button onClick={() => toggleTask(t.id)} aria-label="Toggle task" className={`w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition ${done ? "bg-primary border-primary text-primary-foreground" : "border-border"}`}>
+                          {done && <Check className="w-3 h-3" />}
+                        </button>
+                        <span className={`flex-1 ${done ? "line-through opacity-60" : ""}`}>{t.title}</span>
+                        {t.to && <span className="text-xs text-muted-foreground">{t.to.split(" ")[0]}</span>}
+                      </li>
+                    );
+                  })}
                 </ul>
+                {stage >= 3 && (
+                  <Link href="/dashboard" className="mt-4 inline-block text-xs font-medium text-secondary hover:underline">
+                    See all tasks on the Dashboard
+                  </Link>
+                )}
               </section>
             </>
           )}

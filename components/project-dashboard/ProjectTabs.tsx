@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import OverviewTab from "./tabs/OverviewTab";
 import MilestonesTab from "./tabs/MilestonesTab";
-import SubmissionsTab from "./tabs/SubmissionsTab";
 import FeedbackTab from "./tabs/FeedbackTab";
 import ChatTab from "./tabs/ChatTab";
 import type { project as Project } from "../../app/(student)/project/dummy-data";
@@ -17,7 +16,11 @@ import {
 export default function ProjectTabs({ project }: { project: typeof Project }) {
      // The URL is the source of truth, so the sidebar and the tab strip always agree.
      const searchParams = useSearchParams();
-     const active = parseProjectTab(searchParams.get("tab"));
+     const parsed = parseProjectTab(searchParams.get("tab"));
+
+     // Submissions now live inside each milestone, so an old link opens Milestones instead.
+     const active = parsed === "submissions" ? "milestones" : parsed;
+     const tabs = projectTabs.filter((t) => t.id !== "submissions");
 
      return (
           <div className="space-y-4">
@@ -25,9 +28,9 @@ export default function ProjectTabs({ project }: { project: typeof Project }) {
                <div
                     role="tablist"
                     aria-label="Project sections"
-                    className="scrollbar-sidebar -mb-px flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border"
+                    className="scrollbar-sidebar flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1 text-sm"
                >
-                    {projectTabs.map((t) => {
+                    {tabs.map((t) => {
                          const isActive = active === t.id;
                          return (
                               <Link
@@ -37,15 +40,13 @@ export default function ProjectTabs({ project }: { project: typeof Project }) {
                                    role="tab"
                                    aria-selected={isActive}
                                    aria-current={isActive ? "page" : undefined}
-                                   className={`relative whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${isActive
-                                             ? "text-foreground"
+                                   className={`whitespace-nowrap rounded-md px-4 py-1.5 font-medium transition ${
+                                        isActive
+                                             ? "bg-primary text-primary-foreground"
                                              : "text-muted-foreground hover:text-foreground"
-                                        }`}
+                                   }`}
                               >
                                    {t.label}
-                                   {isActive && (
-                                        <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />
-                                   )}
                               </Link>
                          );
                     })}
@@ -55,7 +56,6 @@ export default function ProjectTabs({ project }: { project: typeof Project }) {
                <div key={active} className="animate-[fadeSlide_180ms_ease-out]">
                     {active === "overview" && <OverviewTab project={project} />}
                     {active === "milestones" && <MilestonesTab project={project} />}
-                    {active === "submissions" && <SubmissionsTab project={project} />}
                     {active === "feedback" && <FeedbackTab project={project} />}
                     {active === "chat" && <ChatTab project={project} />}
                </div>

@@ -1,26 +1,19 @@
-import { redirect } from "next/navigation";
-import { auth } from "../../lib/auth";
 import "../../components/student/student-animations.css";
-import Sidebar from "../../components/student/Sidebar";
+import { StageProvider } from "../../lib/stage";
+import { ProjectStoreProvider } from "../../lib/project-store";
+import Sidebar from "../../components/PlusSidebar";
+import SidebarShell from "../../components/SidebarShell";
+import ThemeScript from "../../components/ThemeScript";
 
-export default async function StudentLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const session = await auth();
-
-  if (!session) redirect("/login");
-
-  // Teachers shouldn't see the student area
-if ((session.user as any).role !== "student") redirect("/teacher/dashboard");
-
+export default function StudentLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-background">
-      <Sidebar />
-      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-6 md:p-10">
-        {children}
-      </main>
-    </div>
+    <>
+      <ThemeScript />
+      <StageProvider>
+        <ProjectStoreProvider>
+          <SidebarShell sidebar={<Sidebar />}>{children}</SidebarShell>
+        </ProjectStoreProvider>
+      </StageProvider>
+    </>
   );
 }
