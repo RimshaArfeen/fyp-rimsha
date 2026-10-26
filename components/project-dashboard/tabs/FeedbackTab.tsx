@@ -1,36 +1,48 @@
-
-
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import Badge from "../ui/Badge";
 import { Avatar } from "../ui/Avatar";
+import { useProjectStore } from "../../../lib/project-store";
+import { projectTabHref } from "../../../lib/project-tabs";
 import type { project as Project } from "../../../app/(student)/project/dummy-data";
 
-export default function FeedbackTab({ project }: { project: typeof Project }) {
-     const [activeId, setActiveId] = useState(project.feedback[0]?.id);
-     const active = project.feedback.find((f) => f.id === activeId);
+const input =
+     "w-full rounded-[var(--radius-custom)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+
+export default function FeedbackTab(_props: { project: typeof Project }) {
+     const { feedback, milestones, milestoneOf, resolveFeedback, replyFeedback } = useProjectStore();
+     const [activeId, setActiveId] = useState<string | null>(null);
+     const [replying, setReplying] = useState(false);
+     const [text, setText] = useState("");
+
+     const active = feedback.find((f) => f.id === activeId) ?? feedback[0];
+     const mTitle = active ? milestoneOf(active) : undefined;
+     const mStatus = milestones.find((m) => m.title === mTitle)?.status;
+
+     const send = () => {
+          if (!text.trim() || !active) return;
+          replyFeedback(active.id, text.trim());
+          setText("");
+          setReplying(false);
+     };
 
      return (
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                {/* List */}
                <ul className="md:col-span-5 space-y-2">
-                    {project.feedback.map((f) => {
-                         const isActive = f.id === activeId;
+                    {feedback.map((f) => {
+                         const isActive = f.id === active?.id;
                          return (
                               <li key={f.id}>
                                    <button
-                                        onClick={() => setActiveId(f.id)}
-                                        className={`w-full text-left card-surface p-4 transition-colors ${isActive ? "bg-accent" : "hover:bg-accent/60"
-                                             }`}
+                                        onClick={() => { setActiveId(f.id); setReplying(false); }}
+                                        className={`w-full text-left card-surface p-4 transition-colors ${isActive ? "bg-accent" : "hover:bg-accent/60"}`}
                                    >
                                         <div className="flex items-center justify-between gap-2">
                                              <p className="text-sm font-medium">{f.author}</p>
-                                             {!f.resolved ? (
-                                                  <Badge variant="pending">Awaiting</Badge>
-                                             ) : (
-                                                  <Badge variant="approved">Resolved</Badge>
-                                             )}
+                                             {!f.resolved ? <Badge variant="pending">Awaiting</Badge> : <Badge variant="approved">Resolved</Badge>}
                                         </div>
                                         <p className="mt-1 text-xs text-muted-foreground">{f.date}</p>
                                         <p className="mt-2 text-sm line-clamp-2 text-foreground/80">{f.snippet}</p>
@@ -56,31 +68,58 @@ export default function FeedbackTab({ project }: { project: typeof Project }) {
                                    {active.body}
                               </blockquote>
 
-                              <div className="mt-4 flex flex-wrap gap-2">
-                                   {["Auth flow", "Rate limiting", "Diagrams"].map((tag) => (
-                                        <span
-                                             key={tag}
-                                             className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-                                        >
-                                             {tag}
+                              {mTitle && (
+                                   <div className="mt-4 flex flex-wrap items-center gap-3">
+                                        <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                                             Milestone: {mTitle}
                                         </span>
-                                   ))}
-                              </div>
+                                        <Link href={projectTabHref("milestones")} className="text-xs font-medium text-secondary hover:underline">
+                                             {mStatus === "revision" ? "Fix and resubmit →" : "Open milestones →"}
+                                        </Link>
+                                   </div>
+                              )}
 
-                              <div className="mt-6 flex justify-end gap-2">
-                                   <button className="rounded-[var(--radius-custom)] border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-accent transition-colors">
-                                        Reply
-                                   </button>
-                                   {!active.resolved && (
-                                        <button className="rounded-[var(--radius-custom)] bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover transition-colors">
-                                             Mark as resolved
+                              {active.replies.length > 0 && (
+                                   <ul className="mt-4 space-y-2">
+                                        {active.replies.map((r, i) => (
+                                             <li key={i} className="rounded-[var(--radius-custom)] bg-muted p-3 text-sm">
+                                                  <p className="text-xs text-muted-foreground mb-1">You · {r.date}</p>
+                                                  {r.text}
+                                             </li>
+                                        ))}
+                                   </ul>
+                              )}
+
+                              {replying && (
+                                   <div className="mt-4 space-y-2">
+                                        <textarea className={input} rows={3} placeholder="Write your reply" value={text} onChange={(e) => setText(e.target.value)} />
+                                        <div className="flex justify-end gap-2">
+                                             <button onClick={() => setReplying(false)} className="rounded-[var(--radius-custom)] border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-accent transition-colors">
+                                                  Cancel
+                                             </button>
+                                             <button onClick={send} className="rounded-[var(--radius-custom)] bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover transition-colors">
+                                                  Send reply
+                                             </button>
+                                        </div>
+                                   </div>
+                              )}
+
+                              {!replying && (
+                                   <div className="mt-6 flex justify-end gap-2">
+                                        <button onClick={() => setReplying(true)} className="rounded-[var(--radius-custom)] border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-accent transition-colors">
+                                             Reply
                                         </button>
-                                   )}
-                              </div>
+                                        {!active.resolved && (
+                                             <button onClick={() => resolveFeedback(active.id)} className="rounded-[var(--radius-custom)] bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover transition-colors">
+                                                  Mark as resolved
+                                             </button>
+                                        )}
+                                   </div>
+                              )}
                          </div>
                     ) : (
                          <div className="card-surface p-6 text-sm text-muted-foreground">
-                              Select a feedback item to view details.
+                              No feedback yet. It appears here after your supervisor reviews a submission.
                          </div>
                     )}
                </div>

@@ -6,28 +6,30 @@ import Link from "next/link";
 import { CheckCircle2, CalendarClock, MessageSquare, TrendingUp, Users, Circle, ChevronDown } from "lucide-react";
 import CountUp from "../../../components/student/CountUp";
 import ProgressRing from "../../../components/student/ProgressRing";
-import { student, team, project, tasks as initialTasks, deadlines, feedback, TaskStatus } from "../../../lib/dummyData";
+import FlowStepper from "../../../components/student/FlowStepper";
+import NextStepCard from "../../../components/student/NextStepCard";
+import { student, team, project, TaskStatus } from "../../../lib/dummyData";
+import { useStage } from "../../../lib/stage";
+import { useProjectStore } from "../../../lib/project-store";
+import { projectTabHref } from "../../../lib/project-tabs";
 
 const badgeClass = { done: "badge-approved", pending: "badge-pending", revision: "badge-revision" } as const;
 const badgeLabel = { done: "Done", pending: "Pending", revision: "Revision" } as const;
 
-export default function StudentDashboardPage() {
-  const [tasks, setTasks] = useState(initialTasks);
+function ProjectDashboard() {
+  const { tasks, toggleTask, milestones, feedback } = useProjectStore();
   const [filter, setFilter] = useState<"all" | TaskStatus>("all");
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [readIds, setReadIds] = useState<number[]>([]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [readIds, setReadIds] = useState<string[]>([]);
 
   const doneCount = tasks.filter((t) => t.status === "done").length;
-  const progress = Math.round((doneCount / tasks.length) * 100);
-  const unread = feedback.length - readIds.length;
+  const approved = milestones.filter((m) => m.status === "approved").length;
+  const progress = milestones.length ? Math.round((approved / milestones.length) * 100) : 0;
+  const unread = feedback.filter((f) => !f.resolved && !readIds.includes(f.id)).length;
   const shown = filter === "all" ? tasks : tasks.filter((t) => t.status === filter);
+  const upcoming = milestones.filter((m) => m.status !== "approved").slice(0, 3);
 
-  const toggleTask = (id: number) =>
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: t.status === "done" ? "pending" : "done" } : t))
-    );
-
-  const openFeedback = (id: number) => {
+  const openFeedback = (id: string) => {
     setOpenId(openId === id ? null : id);
     setReadIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
@@ -60,7 +62,7 @@ export default function StudentDashboardPage() {
         </div>
         <div className="relative z-10 flex flex-col items-center gap-2">
           <ProgressRing value={progress} size={130} />
-          <span className="text-xs opacity-80">Project progress</span>
+          <span className="text-xs opacity-80">Milestone progress</span>
         </div>
       </section>
 
@@ -110,7 +112,10 @@ export default function StudentDashboardPage() {
                   </button>
                   <div className="flex-1">
                     <p className={`text-sm font-medium ${task.status === "done" ? "line-through opacity-60" : ""}`}>{task.title}</p>
-                    <p className="text-xs text-muted-foreground">Due {task.due}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Due {task.due}
+                      {task.to ? ` • ${task.to.split(" ")[0]}` : ""}
+                    </p>
                   </div>
                   <span className={badgeClass[task.status]}>{badgeLabel[task.status]}</span>
                 </li>
@@ -120,18 +125,24 @@ export default function StudentDashboardPage() {
 
           {/* Feedback */}
           <section className="fade-up card-surface p-5" style={{ animationDelay: "250ms" }}>
-            <h2 className="font-semibold mb-3">Supervisor Feedback</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold">Supervisor Feedback</h2>
+              <Link href={projectTabHref("feedback")} className="text-xs font-medium text-secondary hover:underline">
+                See all
+              </Link>
+            </div>
             <div className="flex flex-col gap-3">
-              {feedback.map((f) => (
+              {feedback.length === 0 && <p className="text-sm text-muted-foreground">No feedback yet.</p>}
+              {feedback.slice(0, 4).map((f) => (
                 <button key={f.id} onClick={() => openFeedback(f.id)} className="text-left bg-muted rounded-lg p-3 hover:bg-accent transition">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center gap-2">
-                      {!readIds.includes(f.id) && <span className="w-2 h-2 rounded-full bg-secondary" />}
-                      {f.from} • {f.date}
+                      {!f.resolved && !readIds.includes(f.id) && <span className="w-2 h-2 rounded-full bg-secondary" />}
+                      {f.author} • {f.date}
                     </span>
                     <ChevronDown className={`w-4 h-4 transition ${openId === f.id ? "rotate-180" : ""}`} />
                   </div>
-                  <p className={`text-sm mt-1 ${openId === f.id ? "" : "line-clamp-1"}`}>{f.message}</p>
+                  <p className={`text-sm mt-1 ${openId === f.id ? "" : "line-clamp-1"}`}>{f.body}</p>
                 </button>
               ))}
             </div>
@@ -141,7 +152,12 @@ export default function StudentDashboardPage() {
         <div className="flex flex-col gap-6">
           {/* Team */}
           <section className="fade-up card-surface p-5" style={{ animationDelay: "200ms" }}>
-            <h2 className="font-semibold mb-3">{team.name}</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold">{team.name}</h2>
+              <Link href="/my-team" className="text-xs font-medium text-secondary hover:underline">
+                Manage
+              </Link>
+            </div>
             <ul className="flex flex-col gap-3">
               {team.members.map((m) => (
                 <li key={m.id} className="flex items-center gap-3 group">
@@ -163,14 +179,28 @@ export default function StudentDashboardPage() {
 
           {/* Deadlines */}
           <section className="fade-up card-surface p-5" style={{ animationDelay: "300ms" }}>
-            <h2 className="font-semibold mb-3">Upcoming Deadlines</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold">Upcoming Deadlines</h2>
+              <Link href={projectTabHref("milestones")} className="text-xs font-medium text-secondary hover:underline">
+                Milestones
+              </Link>
+            </div>
             <ul className="flex flex-col gap-3">
-              {deadlines.map((d) => (
-                <li key={d.id} className="lift flex items-center gap-3 rounded-lg border border-border p-3 border-l-4 border-l-secondary">
-                  <CalendarClock className="w-4 h-4 text-secondary" />
+              {upcoming.length === 0 && <li className="text-sm text-muted-foreground">All milestones approved. 🎉</li>}
+              {upcoming.map((m) => (
+                <li
+                  key={m.id}
+                  className={`lift flex items-center gap-3 rounded-lg border border-border p-3 border-l-4 ${
+                    m.status === "revision" ? "border-l-destructive" : "border-l-secondary"
+                  }`}
+                >
+                  <CalendarClock className={`w-4 h-4 ${m.status === "revision" ? "text-destructive" : "text-secondary"}`} />
                   <div>
-                    <p className="text-sm font-medium">{d.title}</p>
-                    <p className="text-xs text-muted-foreground">{d.date}</p>
+                    <p className="text-sm font-medium">{m.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Due {m.due}
+                      {m.status === "revision" ? " • Needs revision" : ""}
+                    </p>
                   </div>
                 </li>
               ))}
@@ -178,6 +208,59 @@ export default function StudentDashboardPage() {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function StudentDashboardPage() {
+  const { stage, ready } = useStage();
+  const { milestones } = useProjectStore();
+  if (!ready) return null;
+
+  if (stage === 3) {
+    const needsFix = milestones.some((m) => m.status === "revision");
+    return (
+      <div className="max-w-6xl mx-auto flex flex-col gap-6">
+        <FlowStepper />
+        <NextStepCard
+          title={needsFix ? "A milestone needs changes" : "Check your milestones"}
+          text={needsFix ? "Your supervisor asked for a revision. Fix it and resubmit." : "See what is due and submit your work."}
+          href={projectTabHref("milestones")}
+          button={needsFix ? "Fix and resubmit" : "Open Milestones"}
+        />
+        <ProjectDashboard />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto flex flex-col gap-6">
+      <section
+        className="fade-up rounded-2xl p-6 md:p-8 text-primary-foreground"
+        style={{ background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-hover))" }}
+      >
+        <p className="text-sm opacity-80">Welcome</p>
+        <h1 className="text-3xl font-bold mb-1">{student.name.split(" ")[0]} 👋</h1>
+        <p className="text-sm opacity-80">
+          {stage === 1 ? "You are not in a team yet." : `You are in ${team.name}. Next, create your project.`}
+        </p>
+      </section>
+      <FlowStepper />
+      {stage === 1 ? (
+        <NextStepCard
+          title="Find a team"
+          text="Search teams by skill and send a join request."
+          href="/teams"
+          button="Find Teams"
+        />
+      ) : (
+        <NextStepCard
+          title="Create your project"
+          text="Add your project to unlock Milestones and Feedback."
+          href="/my-team"
+          button="Go to My Team"
+        />
+      )}
     </div>
   );
 }

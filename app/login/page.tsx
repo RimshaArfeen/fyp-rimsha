@@ -1,4 +1,3 @@
-
 // app/login/page.tsx
 "use client";
 
@@ -6,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import ThemeToggle from "../../components/ThemeToggle";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -45,6 +45,10 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
+      <div className="fixed right-4 top-4 z-50">
+        <ThemeToggle tone="light" />
+      </div>
+
       {/* LEFT SIDE - Branding */}
       <div className="hidden md:flex w-1/2 bg-primary flex-col justify-between p-10 relative overflow-hidden">
         <div className="flex items-center gap-2 z-10">
@@ -153,7 +157,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p role="alert" className="text-sm text-red-600">
+              <p role="alert" className="text-sm text-destructive">
                 {error}
               </p>
             )}
