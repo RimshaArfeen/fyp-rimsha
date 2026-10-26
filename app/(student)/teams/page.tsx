@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Search, Users, X, Send, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useStage } from "../../../lib/stage";
 
 type Team = {
   id: number;
@@ -27,11 +28,15 @@ const teams: Team[] = [
 const allSkills = Array.from(new Set(teams.flatMap((t) => t.skills))).sort();
 
 export default function FindTeamsPage() {
+  const router = useRouter();
+  const { stage, setStage, ready } = useStage();
+
   const [query, setQuery] = useState("");
   const [skill, setSkill] = useState("all");
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [requested, setRequested] = useState<number[]>([]);
   const [selected, setSelected] = useState<Team | null>(null);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setSelected(null);
@@ -39,8 +44,25 @@ export default function FindTeamsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const toggleRequest = (id: number) =>
-    setRequested((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  useEffect(() => {
+    if (ready && stage >= 2) router.replace("/my-team");
+  }, [ready, stage, router]);
+
+  const joinTeam = (t: Team) => {
+    if (requested.length > 0) return;
+    setRequested([t.id]);
+    setSelected(null);
+    setNotice(`Request sent to ${t.name}. Accepted! Taking you to your team...`);
+    setTimeout(() => {
+      setStage(2);
+      router.push("/my-team");
+    }, 1800);
+  };
+
+  const createTeam = () => {
+    setStage(2);
+    router.push("/my-team");
+  };
 
   const q = query.trim().toLowerCase();
   const filtered = teams.filter((t) => {
@@ -57,19 +79,31 @@ export default function FindTeamsPage() {
   const RequestButton = ({ team, full }: { team: Team; full?: boolean }) => {
     const isFull = team.members.length >= team.maxMembers;
     const sent = requested.includes(team.id);
+    const locked = requested.length > 0 && !sent;
     if (isFull)
-      return <button disabled className={`px-4 py-2 rounded-lg text-sm bg-muted text-muted-foreground cursor-not-allowed ${full ? "w-full" : ""}`}>Team Full</button>;
+      return (
+        <button disabled className={`px-4 py-2 rounded-lg text-sm bg-muted text-muted-foreground cursor-not-allowed ${full ? "w-full" : ""}`}>
+          Team Full
+        </button>
+      );
     return (
       <button
-        onClick={() => toggleRequest(team.id)}
-        className={`flex items-center justify-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition hover:scale-105 ${full ? "w-full" : ""} ${
-          sent ? "border border-border text-foreground" : "bg-primary text-primary-foreground"
+        onClick={() => joinTeam(team)}
+        disabled={sent || locked}
+        className={`flex items-center justify-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition ${full ? "w-full" : ""} ${
+          sent
+            ? "bg-success text-success-foreground"
+            : locked
+            ? "bg-muted text-muted-foreground cursor-not-allowed"
+            : "bg-primary text-primary-foreground hover:scale-105"
         }`}
       >
-        {sent ? <><Check className="w-4 h-4" /> Cancel</> : <><Send className="w-4 h-4" /> Join Team</>}
+        {sent ? <><Check className="w-4 h-4" /> Request sent</> : <><Send className="w-4 h-4" /> Join Team</>}
       </button>
     );
   };
+
+  if (!ready || stage >= 2) return null;
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-6">
@@ -87,11 +121,20 @@ export default function FindTeamsPage() {
           <p className="text-sm opacity-80 mb-2">
             <span className="text-2xl font-bold text-secondary">{requested.length}</span> request{requested.length === 1 ? "" : "s"} sent
           </p>
-          <Link href="/my-team" className="inline-block px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition">
-            Go to My Team
-          </Link>
+          <button
+            onClick={createTeam}
+            className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition"
+          >
+            Create my own team
+          </button>
         </div>
       </section>
+
+      {notice && (
+        <div className="pop fixed top-6 right-6 z-50 bg-primary text-primary-foreground px-5 py-3 rounded-xl shadow-lg text-sm">
+          {notice}
+        </div>
+      )}
 
       {/* Filters */}
       <section className="fade-up card-surface p-4 flex flex-wrap items-center gap-3" style={{ animationDelay: "80ms" }}>
@@ -138,7 +181,9 @@ export default function FindTeamsPage() {
                     <h2 className="font-semibold">{team.name}</h2>
                     <p className="text-sm text-muted-foreground">{team.project}</p>
                   </div>
-                  <span className={`whitespace-nowrap ${spots > 0 ? "badge-approved" : "badge-revision"}`}>{spots > 0 ? `${spots} spot${spots > 1 ? "s" : ""} left` : "Full"}</span>
+                  <span className={`whitespace-nowrap ${spots > 0 ? "badge-approved" : "badge-revision"}`}>
+                    {spots > 0 ? `${spots} spot${spots > 1 ? "s" : ""} left` : "Full"}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -149,7 +194,9 @@ export default function FindTeamsPage() {
                       </div>
                     ))}
                   </div>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />{team.members.length}/{team.maxMembers}</span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Users className="w-3 h-3" />{team.members.length}/{team.maxMembers}
+                  </span>
                 </div>
 
                 <div className="h-1.5 rounded-full bg-muted overflow-hidden">

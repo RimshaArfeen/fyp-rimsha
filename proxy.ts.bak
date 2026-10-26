@@ -6,7 +6,7 @@ import { auth } from "./lib/auth";
 export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
-  const role = req.auth?.user?.role;
+ const role = (req.auth?.user as any)?.role;
   const path = nextUrl.pathname;
 
   const isAuthPage = path === "/login" || path === "/signup";

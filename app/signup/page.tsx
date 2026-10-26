@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import ThemeToggle from "../../components/ThemeToggle";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -51,6 +52,10 @@ export default function SignupPage() {
         return;
       }
 
+      // A new account always starts at the beginning of the journey
+      try {
+        localStorage.setItem("pulse-stage", "1");
+      } catch {}
       router.push("/dashboard");
       router.refresh();
     } catch {
@@ -65,6 +70,10 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
+      <div className="fixed right-4 top-4 z-50">
+        <ThemeToggle tone="light" />
+      </div>
+
       {/* LEFT SIDE - Branding */}
       <div className="hidden md:flex w-1/2 bg-primary flex-col justify-between p-10 relative overflow-hidden">
         <div className="flex items-center gap-2 z-10">
@@ -116,7 +125,6 @@ export default function SignupPage() {
         </p>
       </div>
 
-      
       {/* RIGHT SIDE - Form */}
       <div className="w-full md:w-1/2 flex flex-col justify-center items-center p-10 bg-background">
         <div className="w-full max-w-sm">
@@ -209,7 +217,7 @@ export default function SignupPage() {
             </div>
 
             {error && (
-              <p role="alert" className="text-sm text-red-600">
+              <p role="alert" className="text-sm text-destructive">
                 {error}
               </p>
             )}
