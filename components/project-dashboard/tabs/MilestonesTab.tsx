@@ -1,3 +1,5 @@
+
+//app/components/project-dashboard/tabs/MilestonesTab.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,82 +9,114 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { SectionCard } from "../ui/SectionCard";
 import { Avatar } from "../ui/Avatar";
 import Badge from "../ui/Badge";
-import { useProjectStore } from "../../../lib/project-store";
 import { projectTabHref } from "../../../lib/project-tabs";
-import type { project as Project } from "../../../app/(student)/project/dummy-data";
+import { useProjectStore, type ProjectInfo, type Milestone } from "../../../lib/project-store";
+import MilestoneFormDialog from "../MilestoneFormDialog";
 
 const filters = ["All", "Pending", "Approved", "Revision"] as const;
-type Milestone = (typeof Project)["milestones"][number];
 
-export default function MilestonesTab({ project }: { project: typeof Project }) {
+export default function MilestonesTab({ project }: { project: ProjectInfo }) {
      const [filter, setFilter] = useState<(typeof filters)[number]>("All");
-     const [selected, setSelected] = useState<Milestone | null>(null);
-        const { milestones, submissions } = useProjectStore();
+     const [selectedId, setSelectedId] = useState<string | null>(null);
+     const [form, setForm] = useState<{ milestone?: Milestone } | null>(null);
+     const [notice, setNotice] = useState("");
+     const { milestones, isLead } = useProjectStore();
+     const router = useRouter();
+     const open = useSearchParams().get("open");
 
-     const list =
-          filter === "All"
-               ? milestones
-               : milestones.filter((m) => m.status === filter.toLowerCase());
+     useEffect(() => { if (open) setSelectedId(open); }, [open]);
+
+     const list = filter === "All" ? milestones : milestones.filter((m) => m.status === filter.toLowerCase());
+     const selected = milestones.find((m) => m.id === selectedId) ?? null;
+     const close = () => {
+          setSelectedId(null);
+          if (open) router.replace(projectTabHref("milestones"), { scroll: false });
+     };
+     const say = (m: string) => {
+          setNotice(m);
+          setTimeout(() => setNotice(""), 2600);
+     };
 
      return (
           <>
                <SectionCard>
-                    {/* Filter pills */}
-                    <div className="mb-5 flex flex-wrap gap-2">
-                         {filters.map((f) => (
-                              <button
-                                   key={f}
-                                   onClick={() => setFilter(f)}
-                                   className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${filter === f
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+                         <div className="flex flex-wrap gap-2">
+                              {filters.map((f) => (
+                                   <button
+                                        key={f}
+                                        onClick={() => setFilter(f)}
+                                        className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${filter === f
                                              ? "bg-primary text-primary-foreground border-primary"
                                              : "bg-card text-muted-foreground border-border hover:bg-accent"
-                                        }`}
+                                             }`}
+                                   >
+                                        {f}
+                                   </button>
+                              ))}
+                         </div>
+                         {isLead && (
+                              <button
+                                   type="button"
+                                   onClick={() => setForm({})}
+                                   className="rounded-[var(--radius-custom)] bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
                               >
-                                   {f}
+                                   + New milestone
                               </button>
-                         ))}
+                         )}
                     </div>
 
-                    {/* Timeline */}
                     <ol className="relative border-l border-border ml-2 space-y-6">
                          {list.map((m) => (
                               <li key={m.id} className="pl-6 relative">
                                    <span
                                         className={`absolute -left-[7px] top-1.5 h-3 w-3 rounded-full ring-2 ring-card ${m.status === "approved"
-                                                  ? "bg-success"
-                                                  : m.status === "pending"
-                                                       ? "bg-secondary"
-                                                       : "bg-destructive"
+                                             ? "bg-success"
+                                             : m.status === "pending"
+                                                  ? "bg-secondary"
+                                                  : "bg-destructive"
                                              }`}
                                    />
                                    <div className="card-surface p-4">
                                         <div className="flex items-start justify-between gap-3">
-                                             <div>
+                                             <div className="min-w-0">
                                                   <h4 className="font-medium">{m.title}</h4>
-                                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                                       Due {m.due}
-                                                  </p>
+                                                  <p className="text-xs text-muted-foreground mt-0.5">Due {m.due}</p>
+                                                  {m.description && (
+                                                       <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{m.description}</p>
+                                                  )}
                                              </div>
                                              <Badge variant={m.status}>
                                                   {m.status.charAt(0).toUpperCase() + m.status.slice(1)}
                                              </Badge>
                                         </div>
 
-                                        <div className="mt-3 flex items-center justify-between">
+                                        <div className="mt-3 flex items-center justify-between gap-2">
                                              <div className="flex -space-x-2">
-                                                  {m.assignees.map((a) => (
-                                                       <span key={a} className="ring-2 ring-card rounded-full">
+                                                  {m.assignees.map((a, i) => (
+                                                       <span key={`${a}-${i}`} className="ring-2 ring-card rounded-full">
                                                             <Avatar initials={a} size={26} />
                                                        </span>
                                                   ))}
                                              </div>
-                                             <button
-                                                  type="button"
-                                                  onClick={() => setSelected(m)}
-                                                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-sm"
-                                             >
-                                                  {m.status === "revision" ? "Fix and resubmit →" : "View details →"}
-                                             </button>
+                                             <div className="flex items-center gap-3">
+                                                  {isLead && m.status !== "approved" && (
+                                                       <button
+                                                            type="button"
+                                                            onClick={() => setForm({ milestone: m })}
+                                                            className="text-xs font-medium text-secondary hover:underline"
+                                                       >
+                                                            Edit
+                                                       </button>
+                                                  )}
+                                                  <button
+                                                       type="button"
+                                                       onClick={() => setSelectedId(m.id)}
+                                                       className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-sm"
+                                                  >
+                                                       {m.status === "revision" ? "Fix and resubmit →" : "View details →"}
+                                                  </button>
+                                             </div>
                                         </div>
                                    </div>
                               </li>
@@ -90,18 +124,31 @@ export default function MilestonesTab({ project }: { project: typeof Project }) 
 
                          {list.length === 0 && (
                               <li className="pl-6 text-sm text-muted-foreground">
-                                   No milestones match this filter.
+                                   {milestones.length === 0
+                                        ? isLead
+                                             ? "No milestones yet. Click “New milestone” to add the first one."
+                                             : "Your team lead has not created any milestones yet."
+                                        : "No milestones match this filter."}
                               </li>
                          )}
                     </ol>
                </SectionCard>
 
-               {selected && (
-                    <MilestoneDetailsModal
-                         milestone={selected}
+               {selected && <MilestoneDetailsModal milestone={selected} project={project} onClose={close} />}
+
+               {form && (
+                    <MilestoneFormDialog
                          project={project}
-                         onClose={() => setSelected(null)}
+                         milestone={form.milestone}
+                         onClose={() => setForm(null)}
+                         onSaved={say}
                     />
+               )}
+
+               {notice && (
+                    <div className="pop fixed top-6 right-6 z-50 bg-primary text-primary-foreground px-5 py-3 rounded-xl shadow-lg text-sm">
+                         {notice}
+                    </div>
                )}
           </>
      );
@@ -113,7 +160,7 @@ function MilestoneDetailsModal({
      onClose,
 }: {
      milestone: Milestone;
-     project: typeof Project;
+     project: ProjectInfo;
      onClose: () => void;
 }) {
      const [mounted, setMounted] = useState(false);
@@ -143,7 +190,7 @@ function MilestoneDetailsModal({
      /* ---- Derived info ---- */
 
      const assigneeMembers = project.members.filter((mem) =>
-          milestone.assignees.includes(mem.initials)
+          (live?.assigneeIds ?? milestone.assigneeIds).includes(mem.id)
      );
 
      const lead =
@@ -153,8 +200,8 @@ function MilestoneDetailsModal({
      const relatedFeedback = feedbackFor(milestone.title);
 
      const daysUntilDue = (() => {
-          const due = new Date(milestone.due);
-          const today = new Date();
+          const due = new Date(live?.dueISO ?? milestone.dueISO);
+                    const today = new Date();
           if (isNaN(due.getTime())) return null;
           return Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
      })();
@@ -224,6 +271,9 @@ function MilestoneDetailsModal({
                                         {milestone.title}
                                    </h3>
                                    <p className="mt-1 text-sm text-muted-foreground">{s.blurb}</p>
+                                   {milestone.description && (
+                                        <p className="mt-2 whitespace-pre-wrap break-words text-sm">{milestone.description}</p>
+                                   )}
                               </div>
 
                               <button
@@ -279,10 +329,10 @@ function MilestoneDetailsModal({
                               {daysUntilDue !== null && (
                                    <span
                                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${daysUntilDue < 0
-                                                  ? "border-destructive/30 bg-destructive/10 text-destructive"
-                                                  : daysUntilDue <= 7
-                                                       ? "border-secondary/30 bg-secondary/10 text-secondary"
-                                                       : "border-border bg-background/60 text-muted-foreground"
+                                             ? "border-destructive/30 bg-destructive/10 text-destructive"
+                                             : daysUntilDue <= 7
+                                                  ? "border-secondary/30 bg-secondary/10 text-secondary"
+                                                  : "border-border bg-background/60 text-muted-foreground"
                                              }`}
                                    >
                                         {daysUntilDue < 0
@@ -371,7 +421,7 @@ function MilestoneDetailsModal({
                                                        </div>
                                                        <div className="min-w-0 flex-1">
                                                             <p className="text-sm font-medium truncate">{m.name}</p>
-                                                            <p className="text-xs text-muted-foreground">{m.role}</p>
+                                                            <p className="text-xs text-muted-foreground">{m.isLead ? "Team Lead" : "Member"}</p>
                                                        </div>
                                                        <span
                                                             className={`text-[11px] font-medium ${m.online ? "text-success" : "text-muted-foreground"}`}
@@ -529,8 +579,10 @@ function MilestoneDetailsModal({
 
 function MilestoneActions({ milestone }: { milestone: Milestone }) {
      const { milestones, submissionsFor, feedbackFor, submit } = useProjectStore();
-     const [fileName, setFileName] = useState("");
+     const [file, setFile] = useState<File | null>(null);
      const [note, setNote] = useState("");
+     const [busy, setBusy] = useState(false);
+     const [error, setError] = useState("");
 
      const status = milestones.find((m) => m.id === milestone.id)?.status ?? milestone.status;
      const latest = submissionsFor(milestone.title)[0];
@@ -542,11 +594,19 @@ function MilestoneActions({ milestone }: { milestone: Milestone }) {
           "w-full rounded-[var(--radius-custom)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
      const link = "text-xs font-medium text-secondary hover:underline";
 
-     const doSubmit = () => {
-          if (!fileName) return;
-          submit(milestone.id, milestone.title, { fileName, note });
-          setFileName("");
-          setNote("");
+     const doSubmit = async () => {
+          if (!file || busy) return;
+          setBusy(true);
+          setError("");
+          try {
+               await submit(milestone.id, { file, note });
+               setFile(null);
+               setNote("");
+          } catch (e) {
+               setError(e instanceof Error ? e.message : "Upload failed");
+          } finally {
+               setBusy(false);
+          }
      };
 
      return (
@@ -565,7 +625,7 @@ function MilestoneActions({ milestone }: { milestone: Milestone }) {
                               )}
                               <input
                                    type="file"
-                                   onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+                                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
                               />
                               <textarea
@@ -575,13 +635,14 @@ function MilestoneActions({ milestone }: { milestone: Milestone }) {
                                    value={note}
                                    onChange={(e) => setNote(e.target.value)}
                               />
+                              {error && <p className="text-sm text-destructive">{error}</p>}
                               <button
                                    type="button"
                                    onClick={doSubmit}
-                                   disabled={!fileName}
+                                   disabled={!file || busy}
                                    className="rounded-[var(--radius-custom)] bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                   {status === "revision" ? "Resubmit" : "Submit for review"}
+                                   {busy ? "Uploading…" : status === "revision" ? "Resubmit" : "Submit for review"}
                               </button>
                          </>
                     )}
@@ -593,11 +654,9 @@ function MilestoneActions({ milestone }: { milestone: Milestone }) {
                          </p>
                     )}
 
-                    {status === "approved" && (
-                         <p className="text-sm text-success">✓ Approved. Nothing more to submit.</p>
-                    )}
+                    {status === "approved" && <p className="text-sm text-success">✓ Approved. Nothing more to submit.</p>}
 
-                                   {hasFeedback && (
+                    {hasFeedback && (
                          <div className="pt-1">
                               <Link href={projectTabHref("feedback")} className={link}>See in Feedback →</Link>
                          </div>

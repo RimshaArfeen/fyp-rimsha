@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import ThemeToggle from "../../components/ThemeToggle";
+import Loader from "../../components/Loader";
 
 export default function SignupPage() {
   const router = useRouter();

@@ -1,5 +1,6 @@
 // lib/project-tabs.ts
-
+import type { ProjectInfo } from "../lib/project-store";
+export default function ProjectTabs({ project }: { project: ProjectInfo }) { /* body unchanged */ }
 export type ProjectTabId =
   | "overview"
   | "milestones"

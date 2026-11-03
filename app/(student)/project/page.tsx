@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock, RotateCcw, Users, UserPlus, Upload } from "lucide-react";
 import ProjectTabs from "../../../components/project-dashboard/ProjectTabs";
@@ -8,11 +9,19 @@ import CountUp from "../../../components/student/CountUp";
 import ProgressRing from "../../../components/student/ProgressRing";
 import { useProjectStore } from "../../../lib/project-store";
 import { projectTabHref } from "../../../lib/project-tabs";
-import { team, project as info } from "../../../lib/dummyData";
-import { project } from "./dummy-data";
+import Loader from "../../../components/Loader";
+import InviteDialog from "../../../components/project-dashboard/InviteDialog";
+import EditProjectDialog from "../../../components/project-dashboard/EditProjectDialog";
 
 function ProjectView() {
-     const { milestones, submissions } = useProjectStore();
+     const { milestones, project, team, isLead, loading } = useProjectStore();
+     const [inviteOpen, setInviteOpen] = useState(false);
+     const [editOpen, setEditOpen] = useState(false);
+     const [notice, setNotice] = useState("");
+
+     if (loading) return <Loader fullScreen message="Loading project..." />;
+     if (!project || !team)
+          return <div className="max-w-6xl mx-auto card-surface p-6 text-sm text-muted-foreground">No project yet.</div>;
 
      const total = milestones.length;
      const done = milestones.filter((m) => m.status === "approved").length;
@@ -20,12 +29,10 @@ function ProjectView() {
      const revision = milestones.filter((m) => m.status === "revision").length;
      const progress = total ? Math.round((done / total) * 100) : 0;
 
-     // The milestone the gold button should open: one needing revision first,
-     // then one that is pending and has nothing waiting for review yet.
-     const waitingTitles = new Set(submissions.filter((s) => s.status === "pending").map((s) => s.milestone));
+     // Prefer a milestone needing revision, then a pending one that has not been submitted yet.
      const target =
           milestones.find((m) => m.status === "revision") ??
-          milestones.find((m) => m.status === "pending" && !waitingTitles.has(m.title));
+          milestones.find((m) => m.status === "pending" && !m.waiting);
      const base = projectTabHref("milestones");
      const submitHref = target ? `${base}${base.includes("?") ? "&" : "?"}open=${target.id}` : base;
 
@@ -35,6 +42,14 @@ function ProjectView() {
           { label: "Needs revision", value: revision, suffix: "", icon: RotateCcw },
           { label: "Team members", value: project.members.length, suffix: "", icon: Users },
      ];
+
+     const statusLabel = project.status.charAt(0) + project.status.slice(1).toLowerCase();
+     const statusClass = /approved|active/i.test(project.status) ? "badge-approved" : "badge-pending";
+
+     const say = (m: string) => {
+          setNotice(m);
+          setTimeout(() => setNotice(""), 2600);
+     };
 
      return (
           <div className="max-w-6xl mx-auto flex flex-col gap-6">
@@ -48,11 +63,11 @@ function ProjectView() {
                     <div className="relative z-10">
                          <div className="flex items-center gap-2 mb-1">
                               <p className="text-sm opacity-80">Project</p>
-                              <span className="badge-approved">Approved</span>
+                              <span className={statusClass}>{statusLabel}</span>
                          </div>
-                         <h1 className="text-3xl font-bold mb-1">{info.title}</h1>
+                         <h1 className="text-3xl font-bold mb-1">{project.title}</h1>
                          <p className="text-sm opacity-80 mb-4">
-                              {team.name} • Supervisor: {info.supervisor}
+                              {team.name} &bull; Supervisor: {project.supervisor}
                          </p>
                          <div className="flex gap-2 flex-wrap">
                               {target ? (
@@ -71,12 +86,15 @@ function ProjectView() {
                                         <Upload className="w-4 h-4" /> Nothing to submit
                                    </span>
                               )}
-                              <Link
-                                   href="/my-team"
-                                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-primary-foreground text-sm font-medium hover:bg-white/20 transition"
-                              >
-                                   <UserPlus className="w-4 h-4" /> Invite
-                              </Link>
+                              {isLead && (
+                                   <button
+                                        type="button"
+                                        onClick={() => setInviteOpen(true)}
+                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-primary-foreground text-sm font-medium hover:bg-white/20 transition"
+                                   >
+                                        <UserPlus className="w-4 h-4" /> Invite
+                                   </button>
+                              )}
                          </div>
                     </div>
                     <div className="relative z-10 flex flex-col items-center gap-2">
@@ -106,17 +124,33 @@ function ProjectView() {
                <div className="grid lg:grid-cols-3 gap-6">
                     {/* Tabs */}
                     <div className="lg:col-span-2 min-w-0">
-                         <ProjectTabs project={project} />
+                         <Suspense fallback={<div className="card-surface p-6 text-sm text-muted-foreground">Loading…</div>}>
+                              <ProjectTabs project={project} />
+                         </Suspense>
                     </div>
 
                     <div className="flex flex-col gap-6">
                          {/* Details */}
                          <section className="fade-up card-surface p-5" style={{ animationDelay: "150ms" }}>
-                              <h2 className="font-semibold mb-3">Project details</h2>
+                              <div className="mb-3 flex items-center justify-between">
+                                   <h2 className="font-semibold">Project details</h2>
+                                   {isLead && (
+                                        <button
+                                             type="button"
+                                             onClick={() => setEditOpen(true)}
+                                             className="text-xs font-medium text-secondary hover:underline"
+                                        >
+                                             Edit
+                                        </button>
+                                   )}
+                              </div>
+                              <p className="mb-4 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                                   {project.description || "No description yet."}
+                              </p>
                               <dl className="flex flex-col gap-2 text-sm">
                                    <div className="flex justify-between gap-3">
                                         <dt className="text-muted-foreground">Supervisor</dt>
-                                        <dd className="font-medium text-right">{info.supervisor}</dd>
+                                        <dd className="font-medium text-right">{project.supervisor}</dd>
                                    </div>
                                    <div className="flex justify-between gap-3">
                                         <dt className="text-muted-foreground">Started</dt>
@@ -151,21 +185,17 @@ function ProjectView() {
                                         <li key={m.id} className="flex items-center gap-3 group">
                                              <div className="relative">
                                                   <div
-                                                       className={`w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold group-hover:scale-110 transition ${
-                                                            m.role === "Lead" ? "ring-2 ring-secondary" : ""
-                                                       }`}
+                                                       className={`w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold group-hover:scale-110 transition ${m.isLead ? "ring-2 ring-secondary" : ""}`}
                                                   >
                                                        {m.initials}
                                                   </div>
                                                   <span
-                                                       className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-card ${
-                                                            m.online ? "bg-success" : "bg-muted-foreground"
-                                                       }`}
+                                                       className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-card ${m.online ? "bg-success" : "bg-muted-foreground"}`}
                                                   />
                                              </div>
                                              <div className="min-w-0 flex-1">
                                                   <p className="text-sm font-medium truncate">{m.name}</p>
-                                                  <p className="text-xs text-muted-foreground">{m.role}</p>
+                                                  <p className="text-xs text-muted-foreground">{m.isLead ? "Team Lead" : "Member"}</p>
                                              </div>
                                         </li>
                                    ))}
@@ -173,6 +203,23 @@ function ProjectView() {
                          </section>
                     </div>
                </div>
+
+               {inviteOpen && (
+                    <InviteDialog
+                         teamName={team.name}
+                         project={{ title: project.title, description: project.description }}
+                         onClose={() => setInviteOpen(false)}
+                         onSent={say}
+                    />
+               )}
+
+               {editOpen && <EditProjectDialog onClose={() => setEditOpen(false)} onSaved={say} />}
+
+               {notice && (
+                    <div className="pop fixed top-6 right-6 z-50 bg-primary text-primary-foreground px-5 py-3 rounded-xl shadow-lg text-sm">
+                         {notice}
+                    </div>
+               )}
           </div>
      );
 }

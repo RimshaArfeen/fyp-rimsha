@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { ChevronDown, FileText, MessageSquare } from "lucide-react";
 import Badge from "../../../../components/project-dashboard/ui/Badge";
-import { useProjectStore, type LiveMilestone } from "../../../../lib/project-store";
+import Loader from "../../../../components/Loader";
+import { useSupervisorStore, type LiveMilestone } from "../../../../lib/supervisor-store";
 
 type Kind = "waiting" | "revision" | "approved" | "notsubmitted";
 
@@ -21,12 +22,24 @@ const inputCls =
   "w-full px-4 py-2.5 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
 function ReviewBox({ milestone, onDone }: { milestone: LiveMilestone; onDone: (msg: string) => void }) {
-  const { review } = useProjectStore();
+  const { review } = useSupervisorStore();
   const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const decide = (d: "approved" | "revision") => {
-    review(milestone.id, milestone.title, d, comment);
-    onDone(d === "approved" ? `Approved: ${milestone.title}` : `Revision requested: ${milestone.title}`);
+  const decide = async (d: "approved" | "revision") => {
+    if (busy) return;
+    const text = comment.trim() || (d === "approved" ? "Approved." : "");
+    if (!text) return setError("Write what the team needs to change.");
+    setBusy(true);
+    setError("");
+    try {
+      await review(milestone.id, d, text);
+      onDone(d === "approved" ? `Approved: ${milestone.title}` : `Revision requested: ${milestone.title}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the review");
+      setBusy(false);
+    }
   };
 
   return (
@@ -35,22 +48,26 @@ function ReviewBox({ milestone, onDone }: { milestone: LiveMilestone; onDone: (m
       <textarea
         className={inputCls}
         rows={2}
+        maxLength={2000}
         placeholder="Write your feedback for the team"
         value={comment}
         onChange={(e) => setComment(e.target.value)}
       />
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex justify-end gap-2">
         <button
           onClick={() => decide("revision")}
-          className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-accent transition"
+          disabled={busy}
+          className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-accent transition disabled:opacity-50"
         >
           Request revision
         </button>
         <button
           onClick={() => decide("approved")}
-          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover transition"
+          disabled={busy}
+          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover transition disabled:opacity-50"
         >
-          Approve
+          {busy ? "Saving…" : "Approve"}
         </button>
       </div>
     </div>
@@ -58,10 +75,12 @@ function ReviewBox({ milestone, onDone }: { milestone: LiveMilestone; onDone: (m
 }
 
 export default function SupervisorMilestonesPage() {
-  const { milestones, submissionsFor, feedbackFor } = useProjectStore();
+  const { milestones, submissions, feedback, loading } = useSupervisorStore();
   const [filter, setFilter] = useState<"all" | Kind>("all");
   const [openId, setOpenId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+
+  if (loading) return <Loader fullScreen message="Loading..." />;
 
   const say = (msg: string) => {
     setNotice(msg);
@@ -71,7 +90,7 @@ export default function SupervisorMilestonesPage() {
   const kindOf = (m: LiveMilestone): Kind => {
     if (m.status === "approved") return "approved";
     if (m.status === "revision") return "revision";
-    return submissionsFor(m.title)[0]?.status === "pending" ? "waiting" : "notsubmitted";
+    return m.waiting ? "waiting" : "notsubmitted";
   };
 
   const count = (k: "all" | Kind) =>
@@ -95,9 +114,8 @@ export default function SupervisorMilestonesPage() {
               <button
                 key={f.id}
                 onClick={() => setFilter(f.id)}
-                className={`px-3 py-1 rounded-md transition ${
-                  filter === f.id ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                }`}
+                className={`px-3 py-1 rounded-md transition ${filter === f.id ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  }`}
               >
                 {f.label} ({count(f.id)})
               </button>
@@ -111,33 +129,22 @@ export default function SupervisorMilestonesPage() {
           )}
           {list.map((m) => {
             const kind = kindOf(m);
-            const id = String(m.id);
-            const open = openId === id;
-            const subs = submissionsFor(m.title);
-            const fbs = feedbackFor(m.title);
+            const open = openId === m.id;
+            const subs = submissions.filter((s) => s.milestoneId === m.id);
+            const fbs = feedback.filter((f) => f.milestone === m.title && f.projectId === m.projectId);
 
             return (
-              <li key={id} className="pop lift rounded-xl border border-border">
+              <li key={m.id} className="pop lift rounded-xl border border-border">
                 <button
-                  onClick={() => setOpenId(open ? null : id)}
+                  onClick={() => setOpenId(open ? null : m.id)}
                   className="w-full text-left p-4 flex items-center gap-4"
                   aria-expanded={open}
                 >
                   <div className="min-w-0 flex-1">
                     <h2 className="font-semibold truncate">{m.title}</h2>
                     <p className="text-xs text-muted-foreground">
-                      Due {m.due} • {subs.length} submission{subs.length === 1 ? "" : "s"} • {fbs.length} feedback
+                      {m.teamName} • Due {m.due} • {subs.length} submission{subs.length === 1 ? "" : "s"} • {fbs.length} feedback
                     </p>
-                  </div>
-                  <div className="hidden sm:flex -space-x-2">
-                    {m.assignees.map((a) => (
-                      <span
-                        key={a}
-                        className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-primary text-[10px] font-semibold text-primary-foreground"
-                      >
-                        {a}
-                      </span>
-                    ))}
                   </div>
                   {kind === "approved" && <Badge variant="approved">Approved</Badge>}
                   {kind === "revision" && <Badge variant="revision">Needs revision</Badge>}
@@ -163,10 +170,18 @@ export default function SupervisorMilestonesPage() {
                         {subs.map((s) => (
                           <li key={s.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2">
                             <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{s.fileName || s.milestone}</p>
+                              <a
+                                href={s.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block truncate text-sm font-medium hover:underline"
+                              >
+                                {s.fileName || s.milestone}
+                              </a>
                               <p className="text-xs text-muted-foreground">
-                                {s.submittedBy} • {s.date}
+                                {s.submittedBy} • {s.date} • v{s.version}
                               </p>
+                              {s.note && <p className="text-xs text-muted-foreground">Note: {s.note}</p>}
                             </div>
                             <Badge variant={s.status}>{label(s.status)}</Badge>
                           </li>

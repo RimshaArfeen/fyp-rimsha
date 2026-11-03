@@ -1,3 +1,5 @@
+
+//app/components/project-dashboard/tabs/FeedbackTab.tsx
 "use client";
 
 import { useState } from "react";
@@ -7,12 +9,13 @@ import { Avatar } from "../ui/Avatar";
 import { useProjectStore } from "../../../lib/project-store";
 import { projectTabHref } from "../../../lib/project-tabs";
 import type { project as Project } from "../../../app/(student)/project/dummy-data";
+import type { ProjectInfo } from "../../../lib/project-store";
 
 const input =
      "w-full rounded-[var(--radius-custom)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
-export default function FeedbackTab(_props: { project: typeof Project }) {
-     const { feedback, milestones, milestoneOf, resolveFeedback, replyFeedback } = useProjectStore();
+export default function FeedbackTab(_props: { project: ProjectInfo }) {
+     const { feedback, milestones, milestoneOf, resolveFeedback, replyFeedback, markFeedbackRead } = useProjectStore();
      const [activeId, setActiveId] = useState<string | null>(null);
      const [replying, setReplying] = useState(false);
      const [text, setText] = useState("");
@@ -21,11 +24,15 @@ export default function FeedbackTab(_props: { project: typeof Project }) {
      const mTitle = active ? milestoneOf(active) : undefined;
      const mStatus = milestones.find((m) => m.title === mTitle)?.status;
 
-     const send = () => {
+     const send = async () => {
           if (!text.trim() || !active) return;
-          replyFeedback(active.id, text.trim());
-          setText("");
-          setReplying(false);
+          try {
+               await replyFeedback(active.id, text.trim());
+               setText("");
+               setReplying(false);
+          } catch (e) {
+               alert(e instanceof Error ? e.message : "Could not send reply");
+          }
      };
 
      return (
@@ -36,6 +43,7 @@ export default function FeedbackTab(_props: { project: typeof Project }) {
                          const isActive = f.id === active?.id;
                          return (
                               <li key={f.id}>
+                                   <p className="text-xs text-muted-foreground mb-1">{f.author} · {f.date}</p>
                                    <button
                                         onClick={() => { setActiveId(f.id); setReplying(false); }}
                                         className={`w-full text-left card-surface p-4 transition-colors ${isActive ? "bg-accent" : "hover:bg-accent/60"}`}
@@ -83,7 +91,7 @@ export default function FeedbackTab(_props: { project: typeof Project }) {
                                    <ul className="mt-4 space-y-2">
                                         {active.replies.map((r, i) => (
                                              <li key={i} className="rounded-[var(--radius-custom)] bg-muted p-3 text-sm">
-                                                  <p className="text-xs text-muted-foreground mb-1">You · {r.date}</p>
+                                                  <p className="text-xs text-muted-foreground mb-1">{r.mine ? "You" : r.author} · {r.date}</p>
                                                   {r.text}
                                              </li>
                                         ))}

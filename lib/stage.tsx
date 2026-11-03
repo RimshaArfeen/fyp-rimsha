@@ -1,31 +1,29 @@
+
+// lib/stage.tsx
 "use client";
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
-export type Stage = 1 | 2 | 3;
+type State = { stage: 1 | 2 | 3; teamId: string | null; projectId: string | null; isTeamLead: boolean };
+type Ctx = State & { ready: boolean; refresh: () => Promise<void> };
 
-type Ctx = { stage: Stage; setStage: (s: Stage) => void; ready: boolean };
 const StageContext = createContext<Ctx | null>(null);
 
 export function StageProvider({ children }: { children: ReactNode }) {
-  const [stage, setStageState] = useState<Stage>(1);
+  const router = useRouter();
+  const [state, setState] = useState<State>({ stage: 1, teamId: null, projectId: null, isTeamLead: false });
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    const saved = Number(localStorage.getItem("pulse-stage"));
-    if (saved === 1 || saved === 2 || saved === 3) setStageState(saved);
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/me/state", { cache: "no-store" });
+    if (res.status === 401) return router.replace("/login");
+    if (res.ok) setState(await res.json());
     setReady(true);
-  }, []);
+  }, [router]);
 
-  const setStage = (s: Stage) => {
-    setStageState(s);
-    localStorage.setItem("pulse-stage", String(s));
-  };
+  useEffect(() => { refresh(); }, [refresh]);
 
-  return (
-    <StageContext.Provider value={{ stage, setStage, ready }}>
-      {children}
-    </StageContext.Provider>
-  );
+  return <StageContext.Provider value={{ ...state, ready, refresh }}>{children}</StageContext.Provider>;
 }
 
 export function useStage() {

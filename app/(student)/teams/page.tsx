@@ -29,7 +29,7 @@ const allSkills = Array.from(new Set(teams.flatMap((t) => t.skills))).sort();
 
 export default function FindTeamsPage() {
   const router = useRouter();
-  const { stage, setStage, ready } = useStage();
+  const { stage, ready, refresh } = useStage();
 
   const [query, setQuery] = useState("");
   const [skill, setSkill] = useState("all");
@@ -54,13 +54,13 @@ export default function FindTeamsPage() {
     setSelected(null);
     setNotice(`Request sent to ${t.name}. Accepted! Taking you to your team...`);
     setTimeout(() => {
-      setStage(2);
+      refresh();
       router.push("/my-team");
     }, 1800);
   };
 
   const createTeam = () => {
-    setStage(2);
+    refresh();
     router.push("/my-team");
   };
 
@@ -90,13 +90,12 @@ export default function FindTeamsPage() {
       <button
         onClick={() => joinTeam(team)}
         disabled={sent || locked}
-        className={`flex items-center justify-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition ${full ? "w-full" : ""} ${
-          sent
+        className={`flex items-center justify-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition ${full ? "w-full" : ""} ${sent
             ? "bg-success text-success-foreground"
             : locked
-            ? "bg-muted text-muted-foreground cursor-not-allowed"
-            : "bg-primary text-primary-foreground hover:scale-105"
-        }`}
+              ? "bg-muted text-muted-foreground cursor-not-allowed"
+              : "bg-primary text-primary-foreground hover:scale-105"
+          }`}
       >
         {sent ? <><Check className="w-4 h-4" /> Request sent</> : <><Send className="w-4 h-4" /> Join Team</>}
       </button>

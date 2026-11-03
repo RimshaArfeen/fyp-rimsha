@@ -1,3 +1,5 @@
+
+//app/components/StageGuard.tsx
 "use client";
 import { useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";

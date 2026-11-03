@@ -1,109 +1,158 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Crown, UserPlus, Users, Check, X, Send, ClipboardList, FolderKanban, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { team, project } from "../../../lib/dummyData";
 import { useStage } from "../../../lib/stage";
-import { useProjectStore } from "../../../lib/project-store";
+import { api } from "../../../lib/api-client";
+import InviteDialog from "../../../components/project-dashboard/InviteDialog";
 
-type Member = { id: number; name: string; role: string; skills: string[] };
-type Request = { id: number; name: string; skills: string[]; message: string };
-type Invite = { id: number; who: string };
-
-const MAX_MEMBERS = 5;
-const skillsByName: Record<string, string[]> = {
-  "Ayesha Khan": ["React", "Next.js"],
-  "Hamza Ali": ["Node.js", "MongoDB"],
-  "Sara Noor": ["UI Design", "Tailwind CSS"],
+type Member = { id: string; name: string; email: string; skills: string[]; isLead: boolean };
+type JoinReq = { id: string; userId: string; name: string; skills: string[]; message: string | null };
+type InviteT = { id: string; who: string };
+type TaskT = { id: string; title: string; status: string; assignedToId: string | null; assignedToName: string | null };
+type Data = {
+  team: { id: string; name: string; description: string; maxSize: number; skills: string[] } | null;
+  isLead: boolean;
+  members: Member[];
+  joinRequests: JoinReq[];
+  invites: InviteT[];
+  tasks: TaskT[];
+  stats: { joinRequests: number; invites: number };
+  project: { id: string; title: string; description: string; supervisor: string | null; status: string; progress: number } | null;
 };
+type Supervisor = { id: string; name: string; department: string | null };
 
 const inputCls =
   "w-full px-4 py-2.5 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
 export default function MyTeamPage() {
   const router = useRouter();
-  const { stage, setStage, ready } = useStage();
-  const { tasks, addTask, toggleTask } = useProjectStore();
+  const { stage, ready, refresh } = useStage();
 
-  const [viewAs, setViewAs] = useState<"lead" | "member">("lead");
-  const [members, setMembers] = useState<Member[]>(
-    team.members.map((m) => ({ ...m, skills: skillsByName[m.name] ?? [] }))
-  );
-  const [requests, setRequests] = useState<Request[]>([
-    { id: 101, name: "Zain Ahmed", skills: ["React", "UI Design"], message: "I can handle the frontend screens and design." },
-    { id: 102, name: "Maryam Siddiqui", skills: ["Node.js", "Prisma"], message: "Happy to take the backend and database work." },
-    { id: 103, name: "Omar Farooq", skills: ["Testing", "Git"], message: "I can help with testing and documentation." },
-  ]);
-  const [invites, setInvites] = useState<Invite[]>([{ id: 201, who: "kamran@university.edu.pk" }]);
-  const [inviteText, setInviteText] = useState("");
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskTo, setTaskTo] = useState(team.members[1].name);
-  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [data, setData] = useState<Data | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskTo, setTaskTo] = useState("");
   const [pTitle, setPTitle] = useState("");
   const [pDesc, setPDesc] = useState("");
-  const [pSupervisor, setPSupervisor] = useState(project.supervisor);
+  const [pSupervisorId, setPSupervisorId] = useState("");
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+
+  const say = useCallback((msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice(""), 2600);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api<Data>("/api/teams/mine"));
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Could not load your team");
+    }
+  }, [say]);
 
   useEffect(() => {
     if (ready && stage === 1) router.replace("/teams");
-  }, [ready, stage, router]);
+    if (ready && stage > 1) load();
+  }, [ready, stage, router, load]);
 
-  const isLead = viewAs === "lead";
-  const spots = MAX_MEMBERS - members.length;
+  useEffect(() => {
+    if (data?.isLead && !data.project)
+      api<{ supervisors: Supervisor[] }>("/api/supervisors")
+        .then((r) => setSupervisors(r.supervisors))
+        .catch(() => { });
+  }, [data?.isLead, data?.project]);
 
-  const say = (msg: string) => {
-    setNotice(msg);
-    setTimeout(() => setNotice(""), 2600);
+  // default assignee = first non-lead member (or the lead if alone)
+  useEffect(() => {
+    if (data && !data.members.some((m) => m.id === taskTo))
+      setTaskTo(data.members[1]?.id ?? data.members[0]?.id ?? "");
+  }, [data, taskTo]);
+
+  // one wrapper for every mutation: call API -> reload -> toast
+  const run = async (key: string, fn: () => Promise<unknown>, okMsg: string) => {
+    if (busy) return;
+    setBusy(key);
+    try {
+      await fn();
+      await load();
+      say(okMsg);
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const accept = (r: Request) => {
-    if (spots <= 0) return say("Your team is full. Remove a member first.");
-    setMembers((p) => [...p, { id: r.id, name: r.name, role: "Member", skills: r.skills }]);
-    setRequests((p) => p.filter((x) => x.id !== r.id));
-    say(`${r.name} joined your team`);
-  };
-  const decline = (r: Request) => {
-    setRequests((p) => p.filter((x) => x.id !== r.id));
-    say(`Declined ${r.name}`);
-  };
+  if (!ready || stage === 1 || !data || !data.team) return null;
+
+  const isLead = data.isLead;
+  const { team, members, joinRequests: requests, invites, tasks, project } = data;
+  const spots = team.maxSize - members.length;
+
+  const accept = (r: JoinReq) =>
+    run(`req-${r.id}`, () => api(`/api/teams/mine/requests/${r.id}`, "PATCH", { action: "accept" }), `${r.name} joined your team`);
+  const decline = (r: JoinReq) =>
+    run(`req-${r.id}`, () => api(`/api/teams/mine/requests/${r.id}`, "PATCH", { action: "decline" }), `Declined ${r.name}`);
+
   const removeMember = (m: Member) => {
     if (confirmId !== m.id) return setConfirmId(m.id);
-    setMembers((p) => p.filter((x) => x.id !== m.id));
     setConfirmId(null);
-    say(`${m.name} removed from the team`);
+    run(`rm-${m.id}`, () => api(`/api/teams/mine/members/${m.id}`, "DELETE"), `${m.name} removed from the team`);
   };
-  const sendInvite = () => {
-    const who = inviteText.trim();
-    if (!who) return say("Type an email or name first");
-    if (invites.some((i) => i.who.toLowerCase() === who.toLowerCase())) return say("Already invited");
-    setInvites((p) => [{ id: Date.now(), who }, ...p]);
-    setInviteText("");
-    say(`Invitation sent to ${who}`);
-  };
+
+  const cancelInvite = (id: string) =>
+    run(`inv-${id}`, () => api(`/api/teams/mine/invites/${id}`, "DELETE"), "Invite cancelled");
+
   const assignTask = () => {
     const title = taskTitle.trim();
     if (!title) return say("Write the task first");
-    addTask(title, taskTo);
-    setTaskTitle("");
-    say(`Task assigned to ${taskTo}`);
+    const to = members.find((m) => m.id === taskTo);
+    run(
+      "task",
+      async () => {
+        await api("/api/teams/mine/tasks", "POST", { title, assignedToId: taskTo || undefined });
+        setTaskTitle("");
+      },
+      `Task assigned to ${to?.name ?? "the team"}`
+    );
   };
+  const toggleTask = (t: TaskT) =>
+    run(
+      `task-${t.id}`,
+      () => api(`/api/teams/mine/tasks/${t.id}`, "PATCH", { status: t.status === "done" ? "pending" : "done" }),
+      "Task updated"
+    );
 
-  const createProject = () => {
+  const createProject = async () => {
     if (!pTitle.trim()) return say("Write the project title first");
-    setStage(3);
-    router.push("/project");
+    if (busy) return;
+    setBusy("project");
+    try {
+      await api("/api/teams/mine/project", "POST", {
+        title: pTitle,
+        description: pDesc,
+        supervisorId: pSupervisorId || undefined,
+      });
+      await refresh(); // /api/me/state -> stage becomes 3
+      router.push("/project");
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Could not create the project");
+      setBusy(null);
+    }
   };
 
   const stats = [
-    { label: "Members", value: `${members.length}/${MAX_MEMBERS}`, icon: Users },
+    { label: "Members", value: `${members.length}/${team.maxSize}`, icon: Users },
     { label: "Open spots", value: String(spots), icon: UserPlus },
-    { label: "Join requests", value: String(requests.length), icon: Clock },
-    { label: "Invites sent", value: String(invites.length), icon: Send },
+    { label: "Join requests", value: String(data.stats.joinRequests), icon: Clock },
+    { label: "Invites sent", value: String(data.stats.invites), icon: Send },
   ];
-
-  if (!ready || stage === 1) return null;
 
   return (
     <div className="w-full flex flex-col gap-8">
@@ -118,22 +167,14 @@ export default function MyTeamPage() {
           <p className="text-sm opacity-80 mb-1">My Team</p>
           <h1 className="text-3xl font-bold mb-1">{team.name}</h1>
           <p className="text-sm opacity-80">
-            {stage >= 3 ? `${project.title} • Supervisor: ${project.supervisor}` : "No project yet"}
+            {project ? `${project.title} • Supervisor: ${project.supervisor ?? "Not assigned"}` : "No project yet"}
           </p>
         </div>
         <div className="relative z-10 flex flex-col items-end gap-3">
-          <div className="flex bg-white/10 rounded-lg p-1 text-sm">
-            {(["lead", "member"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setViewAs(v)}
-                className={`px-4 py-1.5 rounded-md transition ${viewAs === v ? "bg-secondary text-secondary-foreground font-medium" : "opacity-80"}`}
-              >
-                {v === "lead" ? "Team Lead view" : "Member view"}
-              </button>
-            ))}
-          </div>
-          {stage >= 3 && (
+          <span className="px-4 py-1.5 rounded-lg bg-white/10 text-sm">
+            {isLead ? "Team Lead" : "Team Member"}
+          </span>
+          {project && (
             <Link href="/project" className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition">
               Open Project Dashboard
             </Link>
@@ -160,7 +201,7 @@ export default function MyTeamPage() {
 
       {!isLead && (
         <p className="card-surface p-4 text-sm text-muted-foreground">
-          You are viewing as a team member. Only the team lead can manage requests, send invites and assign tasks. Switch to Team Lead view at the top to see those controls.
+          Only the team lead can manage requests, send invites, assign tasks and create the project. You can update tasks assigned to you.
         </p>
       )}
 
@@ -172,22 +213,25 @@ export default function MyTeamPage() {
             <div className="grid sm:grid-cols-2 gap-4">
               {members.map((m) => (
                 <div key={m.id} className="pop lift rounded-xl border border-border p-4 flex items-start gap-4">
-                  <div className={`relative w-12 h-12 shrink-0 rounded-full bg-primary text-primary-foreground font-semibold flex items-center justify-center ${m.role === "Team Lead" ? "ring-2 ring-secondary" : ""}`}>
+                  <div className={`relative w-12 h-12 shrink-0 rounded-full bg-primary text-primary-foreground font-semibold flex items-center justify-center ${m.isLead ? "ring-2 ring-secondary" : ""}`}>
                     {m.name.charAt(0)}
-                    {m.role === "Team Lead" && <Crown className="absolute -top-2 -right-1 w-4 h-4 text-secondary" />}
+                    {m.isLead && <Crown className="absolute -top-2 -right-1 w-4 h-4 text-secondary" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">{m.name}</p>
-                    <p className="text-xs text-muted-foreground mb-2">{m.role}</p>
+                    <p className="text-xs text-muted-foreground mb-2">{m.isLead ? "Team Lead" : "Member"}</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {m.skills.map((s) => (<span key={s} className="text-xs px-2.5 py-0.5 rounded-full bg-accent text-primary">{s}</span>))}
+                      {m.skills.map((s) => (
+                        <span key={s} className="text-xs px-2.5 py-0.5 rounded-full bg-accent text-primary">{s}</span>
+                      ))}
                     </div>
                   </div>
-                  {isLead && m.role !== "Team Lead" && (
+                  {isLead && !m.isLead && (
                     <button
                       onClick={() => removeMember(m)}
                       onBlur={() => setConfirmId(null)}
-                      className={`text-xs px-3 py-1.5 rounded-lg transition ${confirmId === m.id ? "bg-primary text-primary-foreground" : "border border-border hover:bg-accent"}`}
+                      disabled={busy === `rm-${m.id}`}
+                      className={`text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${confirmId === m.id ? "bg-primary text-primary-foreground" : "border border-border hover:bg-accent"}`}
                     >
                       {confirmId === m.id ? "Confirm?" : "Remove"}
                     </button>
@@ -209,14 +253,28 @@ export default function MyTeamPage() {
                       <div className="w-11 h-11 rounded-full bg-secondary text-secondary-foreground font-semibold flex items-center justify-center">{r.name.charAt(0)}</div>
                       <div className="flex-1 min-w-48">
                         <p className="font-medium">{r.name}</p>
-                        <p className="text-sm text-muted-foreground">{r.message}</p>
+                        <p className="text-sm text-muted-foreground">{r.message ?? "No message"}</p>
                         <div className="flex flex-wrap gap-1.5 mt-2">
-                          {r.skills.map((s) => (<span key={s} className="text-xs px-2.5 py-0.5 rounded-full bg-accent text-primary">{s}</span>))}
+                          {r.skills.map((s) => (
+                            <span key={s} className="text-xs px-2.5 py-0.5 rounded-full bg-accent text-primary">{s}</span>
+                          ))}
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => decline(r)} className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border text-sm hover:bg-accent transition"><X className="w-4 h-4" /> Decline</button>
-                        <button onClick={() => accept(r)} className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary-hover transition"><Check className="w-4 h-4" /> Accept</button>
+                        <button
+                          onClick={() => decline(r)}
+                          disabled={busy === `req-${r.id}`}
+                          className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border text-sm hover:bg-accent transition disabled:opacity-50"
+                        >
+                          <X className="w-4 h-4" /> Decline
+                        </button>
+                        <button
+                          onClick={() => accept(r)}
+                          disabled={busy === `req-${r.id}` || spots <= 0}
+                          className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary-hover transition disabled:opacity-50"
+                        >
+                          <Check className="w-4 h-4" /> Accept
+                        </button>
                       </div>
                     </li>
                   ))}
@@ -228,17 +286,19 @@ export default function MyTeamPage() {
 
         {/* RIGHT: project, invite, tasks */}
         <div className="flex flex-col gap-6">
-          {stage >= 3 ? (
+          {project ? (
             <section className="fade-up card-surface p-6" style={{ animationDelay: "160ms" }}>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-lg">Project</h2>
-                <span className="badge-approved">Approved</span>
+                <span className={project.status === "APPROVED" ? "badge-approved" : "badge-pending"}>
+                  {project.status === "APPROVED" ? "Approved" : "Awaiting supervisor"}
+                </span>
               </div>
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-11 h-11 shrink-0 rounded-xl bg-accent text-primary flex items-center justify-center"><FolderKanban className="w-5 h-5" /></div>
                 <div>
                   <p className="font-medium">{project.title}</p>
-                  <p className="text-sm text-muted-foreground">Supervisor: {project.supervisor}</p>
+                  <p className="text-sm text-muted-foreground">Supervisor: {project.supervisor ?? "Not assigned"}</p>
                 </div>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden mb-1">
@@ -255,9 +315,20 @@ export default function MyTeamPage() {
                   <div className="flex flex-col gap-3">
                     <input className={inputCls} placeholder="Project title" value={pTitle} onChange={(e) => setPTitle(e.target.value)} />
                     <textarea className={inputCls} rows={3} placeholder="Short description" value={pDesc} onChange={(e) => setPDesc(e.target.value)} />
-                    <input className={inputCls} placeholder="Supervisor name" value={pSupervisor} onChange={(e) => setPSupervisor(e.target.value)} />
-                    <button onClick={createProject} className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition">
-                      Create project
+                    <select className={inputCls} value={pSupervisorId} onChange={(e) => setPSupervisorId(e.target.value)}>
+                      <option value="">Choose a supervisor (optional)</option>
+                      {supervisors.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{s.department ? ` · ${s.department}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={createProject}
+                      disabled={busy === "project"}
+                      className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:scale-105 transition disabled:opacity-50"
+                    >
+                      {busy === "project" ? "Creating..." : "Create project"}
                     </button>
                   </div>
                 </>
@@ -270,26 +341,30 @@ export default function MyTeamPage() {
           {isLead && (
             <>
               <section className="fade-up card-surface p-6" style={{ animationDelay: "240ms" }}>
-                <h2 className="font-semibold text-lg mb-4">Invite a Member</h2>
-                <div className="flex gap-2 mb-4">
-                  <input
-                    className={inputCls}
-                    placeholder="Email or name"
-                    value={inviteText}
-                    onChange={(e) => setInviteText(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && sendInvite()}
-                  />
-                  <button onClick={sendInvite} className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm shrink-0 hover:bg-primary-hover transition">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h2 className="font-semibold text-lg">Invitations</h2>
+                  <button
+                    onClick={() => setInviteOpen(true)}
+                    className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm shrink-0 hover:bg-primary-hover transition"
+                  >
                     <UserPlus className="w-4 h-4" /> Invite
                   </button>
                 </div>
+                {invites.length === 0 && <p className="text-sm text-muted-foreground">No pending invitations.</p>}
                 <ul className="flex flex-col gap-2">
                   {invites.map((i) => (
                     <li key={i.id} className="pop flex items-center justify-between gap-2 text-sm bg-muted rounded-lg px-3 py-2">
                       <span className="truncate">{i.who}</span>
                       <span className="flex items-center gap-2 shrink-0">
                         <span className="badge-pending">Pending</span>
-                        <button onClick={() => setInvites((p) => p.filter((x) => x.id !== i.id))} aria-label="Cancel invite" className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+                        <button
+                          onClick={() => cancelInvite(i.id)}
+                          disabled={busy === `inv-${i.id}`}
+                          aria-label="Cancel invite"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </span>
                     </li>
                   ))}
@@ -299,12 +374,26 @@ export default function MyTeamPage() {
               <section className="fade-up card-surface p-6" style={{ animationDelay: "320ms" }}>
                 <h2 className="font-semibold text-lg mb-4 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-secondary" /> Assign a Task</h2>
                 <div className="flex flex-col gap-3 mb-4">
-                  <input className={inputCls} placeholder="Task title" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && assignTask()} />
+                  <input
+                    className={inputCls}
+                    placeholder="Task title"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && assignTask()}
+                  />
                   <div className="flex gap-2">
                     <select className={inputCls} value={taskTo} onChange={(e) => setTaskTo(e.target.value)}>
-                      {members.map((m) => (<option key={m.id} value={m.name}>{m.name}</option>))}
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
                     </select>
-                    <button onClick={assignTask} className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium shrink-0 hover:scale-105 transition">Assign</button>
+                    <button
+                      onClick={assignTask}
+                      disabled={busy === "task"}
+                      className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium shrink-0 hover:scale-105 transition disabled:opacity-50"
+                    >
+                      Assign
+                    </button>
                   </div>
                 </div>
                 <ul className="flex flex-col gap-2">
@@ -312,16 +401,23 @@ export default function MyTeamPage() {
                     const done = t.status === "done";
                     return (
                       <li key={t.id} className="pop flex items-center gap-3 text-sm">
-                        <button onClick={() => toggleTask(t.id)} aria-label="Toggle task" className={`w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition ${done ? "bg-primary border-primary text-primary-foreground" : "border-border"}`}>
+                        <button
+                          onClick={() => toggleTask(t)}
+                          disabled={busy === `task-${t.id}`}
+                          aria-label="Toggle task"
+                          className={`w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition ${done ? "bg-primary border-primary text-primary-foreground" : "border-border"}`}
+                        >
                           {done && <Check className="w-3 h-3" />}
                         </button>
                         <span className={`flex-1 ${done ? "line-through opacity-60" : ""}`}>{t.title}</span>
-                        {t.to && <span className="text-xs text-muted-foreground">{t.to.split(" ")[0]}</span>}
+                        {t.assignedToName && (
+                          <span className="text-xs text-muted-foreground">{t.assignedToName.split(" ")[0]}</span>
+                        )}
                       </li>
                     );
                   })}
                 </ul>
-                {stage >= 3 && (
+                {project && (
                   <Link href="/dashboard" className="mt-4 inline-block text-xs font-medium text-secondary hover:underline">
                     See all tasks on the Dashboard
                   </Link>
@@ -331,6 +427,18 @@ export default function MyTeamPage() {
           )}
         </div>
       </div>
+
+      {inviteOpen && (
+        <InviteDialog
+          teamName={team.name}
+          project={{
+            title: project?.title ?? "No project yet",
+            description: project?.description ?? "Your team has not created a project yet.",
+          }}
+          onClose={() => setInviteOpen(false)}
+          onSent={(m) => { say(m); load(); }}
+        />
+      )}
     </div>
   );
 }
