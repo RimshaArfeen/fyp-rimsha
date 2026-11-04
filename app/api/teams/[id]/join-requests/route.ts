@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../../lib/prisma";
-import { requireUser } from "../../../../../lib/api-auth";
+import { requireUser } from "../ ../../../../lib/api";
 import { isObjectId } from "../../../../../lib/ids";
 
 const Body = z.object({

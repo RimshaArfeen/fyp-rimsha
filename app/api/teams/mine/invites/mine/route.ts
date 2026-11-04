@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../../../lib/prisma";
-import { requireUser } from "../../../../../../lib/api-auth";
+import { requireUser } from "../../ ../../../../lib/api";
 
 export async function GET() {
   const { user, error } = await requireUser("student");

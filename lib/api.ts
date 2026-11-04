@@ -1,3 +1,5 @@
+
+// lib/api.ts
 import { NextResponse } from "next/server";
 import type { ZodType } from "zod";
 import { prisma } from "./prisma";
@@ -16,13 +18,18 @@ export function handle(fn: () => Promise<Response>) {
   });
 }
 
-export type SessionUser = { id: string; name: string; role: string };
+export type Role = "student" | "teacher";
+export type SessionUser = { id: string; name: string; email: string; role: Role };
 
-export async function requireUser(): Promise<SessionUser> {
+/** Throws 401 if not signed in (or the token has no valid role), 403 if the role doesn't match. */
+export async function requireUser(role?: Role): Promise<SessionUser> {
   const session = await auth();
-  const user = session?.user;
-  if (!user?.id) throw new HttpError(401, "Not signed in");
-  return user as SessionUser;
+  const u = session?.user;
+  if (!u?.id || (u.role !== "student" && u.role !== "teacher")) {
+    throw new HttpError(401, "Unauthorized");
+  }
+  if (role && u.role !== role) throw new HttpError(403, "Forbidden");
+  return { id: u.id, name: u.name ?? "", email: u.email ?? "", role: u.role };
 }
 
 export function assertObjectId(id: string, what = "Item") {
@@ -106,7 +113,7 @@ export function assertDeadline(
   checkPast: boolean
 ) {
   if (checkPast) {
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" }); // YYYY-MM-DD
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" });
     if (deadline < today) throw new HttpError(400, "Deadline cannot be in the past");
   }
   const start = dayKey(project.timelineStart);

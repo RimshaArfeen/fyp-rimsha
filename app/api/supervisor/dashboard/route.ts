@@ -12,9 +12,8 @@ type Status = "pending" | "approved" | "revision";
 
 export async function GET() {
   return handle(async () => {
-    const user = await requireUser();
-    if (user.role !== "teacher") throw new HttpError(403, "Supervisors only");
-
+    const user = await requireUser("teacher");
+    
     const projects = await prisma.project.findMany({
       where: { supervisorId: user.id },
       orderBy: { createdAt: "asc" },

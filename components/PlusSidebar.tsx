@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { confirmSignOut } from "../lib/confirm-signout"; 
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Search, Users, FolderKanban, ClipboardList,
@@ -94,7 +94,7 @@ function ProjectLinksFallback() {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ userName, role }: { userName: string; role: "student" | "teacher" }) {
   const pathname = usePathname();
   const { stage } = useStage();
 
@@ -157,15 +157,15 @@ export default function Sidebar() {
 
       {/* Footer Actions */}
       <div className="border-t border-white/15 bg-black/10 p-3.5 space-y-2">
-        <Link
+        {/* <Link
           href="/supervisor"
           className="flex items-center justify-center gap-2 w-full rounded-xl border border-white/20 px-3 py-2.5 text-center text-xs font-semibold text-white/90 transition-all duration-200 hover:bg-white/15 hover:border-white/30"
         >
           <ArrowRightLeft size={14} className="text-secondary" />
           Switch to supervisor view
-        </Link>
+        </Link> */}
         <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => confirmSignOut(userName, role)}
           className="flex items-center justify-center gap-2 w-full rounded-xl bg-secondary px-3 py-2.5 text-xs font-bold text-secondary-foreground transition-all duration-200 hover:opacity-90 shadow-sm"
         >
           <LogOut size={14} />

@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../lib/prisma";
-import { requireUser } from "../../../../lib/api-auth";
+import { requireUser } from " ../../../lib/api";
 import { getMembership } from "../../../../lib/membership";
 
 const Body = z.object({
@@ -15,8 +15,7 @@ export async function PATCH(
 ) {
   const { id } = await params;
 
-  const { user, error } = await requireUser("student");
-  if (error) return error;
+  const user = await requireUser("student");
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

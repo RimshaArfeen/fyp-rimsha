@@ -1,7 +1,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../../lib/prisma";
-import { requireUser } from "../../../../../lib/api-auth";
+import { requireUser } from "../ ../../../../lib/api";
 import { getMembership } from "../../../../../lib/membership";
 
 export async function PATCH(

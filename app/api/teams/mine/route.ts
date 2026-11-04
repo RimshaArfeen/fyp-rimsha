@@ -1,7 +1,7 @@
 // app/api/teams/mine/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../lib/prisma";
-import { requireUser } from "../../../../lib/api-auth";
+import { requireUser } from "../../../../lib/api";
 
 const none = {
   team: null,
@@ -17,8 +17,7 @@ const none = {
 
 export async function GET() {
   try {
-    const { user, error } = await requireUser("student");
-    if (error) return error;
+    const user = await requireUser("student");
 
     const m = await prisma.teamMember.findUnique({
       where: { userId: user.id },

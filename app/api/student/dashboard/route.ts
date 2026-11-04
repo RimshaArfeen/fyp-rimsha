@@ -11,8 +11,7 @@ const EMPTY = { team: null, project: null, tasks: [], milestones: [], submission
 
 export async function GET() {
   return handle(async () => {
-    const user = await requireUser();
-    const student = { id: user.id, name: user.name };
+const user = await requireUser("student");    const student = { id: user.id, name: user.name };
 
     const membership = await prisma.teamMember.findUnique({
       where: { userId: user.id },

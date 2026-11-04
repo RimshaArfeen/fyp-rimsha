@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { requireUser } from "../../../lib/api-auth";
 import { profileUpdateSchema } from "../../../lib/validations";
 import { profileSelect, toProfile } from "../../../lib/profile";
+import {requireUser} from "../../../lib/api";
 
 export async function GET() {
-  const { user, error } = await requireUser();
-  if (error) return error;
+  const user = await requireUser();
 
   const row = await prisma.user.findUnique({
     where: { id: user.id },
@@ -18,8 +17,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
-  const { user, error } = await requireUser();
-  if (error) return error;
+  const user = await requireUser();
 
   const parsed = profileUpdateSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

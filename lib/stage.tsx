@@ -14,6 +14,7 @@ export function StageProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>({ stage: 1, teamId: null, projectId: null, isTeamLead: false });
   const [ready, setReady] = useState(false);
 
+
   const refresh = useCallback(async () => {
     const res = await fetch("/api/me/state", { cache: "no-store" });
     if (res.status === 401) return router.replace("/login");

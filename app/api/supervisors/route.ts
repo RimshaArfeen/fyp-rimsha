@@ -2,11 +2,10 @@
 // This route returns a list of all supervisors (teachers) in the system, including their id, name, and department.
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { requireUser } from "../../../lib/api-auth";
+import { requireUser } from "../../../lib/api";
 
 export async function GET() {
-  const { error } = await requireUser("student");
-  if (error) return error;
+  await requireUser("student");
 
   const teachers = await prisma.user.findMany({
     where: { role: "teacher" },

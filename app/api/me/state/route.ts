@@ -1,11 +1,10 @@
 
+// app/api/me/state/route.ts
 import { NextResponse } from "next/server";
-import { requireUser } from "../../../../lib/api-auth";
 import { getMembership, deriveStage } from "../../../../lib/membership";
-
+import { requireUser } from "../../../../lib/api";
 export async function GET() {
-  const { user, error } = await requireUser("student");
-  if (error) return error;
+  const user = await requireUser("student");
   const m = await getMembership(user.id);
   return NextResponse.json({
     stage: deriveStage(m),

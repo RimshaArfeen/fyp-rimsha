@@ -1,6 +1,6 @@
 
 import { prisma } from "../../../../../../lib/prisma";
-import { requireUser } from "../../../../../../lib/api-auth";
+import { requireUser } from "../../ ../../../../lib/api";
 import { isObjectId } from "../../../../../../lib/ids";
 
 import { NextResponse } from "next/server";

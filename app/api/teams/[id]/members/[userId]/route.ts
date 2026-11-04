@@ -2,7 +2,7 @@
 //app/api/teams/%5Bid%5D/members/%5BuserId%5D/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../../../lib/prisma";
-import { requireUser } from "../../../../../../lib/api-auth";
+import { requireUser } from "../../ ../../../../lib/api";
 import { isObjectId } from "../../../../../../lib/ids";
 
 export async function DELETE(

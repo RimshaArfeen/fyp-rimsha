@@ -54,10 +54,12 @@ export default function SignupPage() {
       }
 
       // A new account always starts at the beginning of the journey
-      try {
-        localStorage.setItem("pulse-stage", "1");
-      } catch {}
-      router.push("/dashboard");
+      if (form.role === "student") {
+        try {
+          localStorage.setItem("pulse-stage", "1");
+        } catch { }
+      }
+      router.push("/post-login");
       router.refresh();
     } catch {
       setError("Network error. Please try again.");
